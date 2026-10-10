@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabase';
 
 type Course = { id: string; name: string };
+type Player = { id: string; nickname: string; handicap_index: number | null };
 type Tee = {
   id: string;
   name: string;
@@ -31,6 +32,11 @@ export default function NewGame() {
   const [scoring, setScoring] = useState('stableford');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [search, setSearch] = useState('');
+  const [matches, setMatches] = useState<Player[]>([]);
+  const [selected, setSelected] = useState<Player[]>([]);
+  const [searchBusy, setSearchBusy] = useState(false);
+  const [searchError, setSearchError] = useState('');
 
   useEffect(() => {
     supabase().from('courses').select('id,name').order('name').then(({ data, error }) => {
@@ -52,6 +58,43 @@ export default function NewGame() {
       });
   }, [course]);
 
+  async function findPlayers() {
+    setSearchError('');
+    setMatches([]);
+    const query = search.trim();
+    if (query.length < 2) {
+      setSearchError('Zadej alespoň 2 znaky přezdívky.');
+      return;
+    }
+    setSearchBusy(true);
+    try {
+      const { data: { user }, error: authError } = await supabase().auth.getUser();
+      if (authError || !user) throw new Error('Nejprve se přihlas.');
+      const escaped = query.replace(/[\%_]/g, '\\$&');
+      const { data, error } = await supabase().from('profiles')
+        .select('id,nickname,handicap_index')
+        .ilike('nickname', '%' + escaped + '%')
+        .order('nickname').limit(15);
+      if (error) throw error;
+      setMatches((data || []).filter(p => p.id !== user.id && !selected.some(s => s.id === p.id)));
+    } catch (e) {
+      setSearchError(e instanceof Error ? e.message : 'Vyhledávání se nezdařilo.');
+    } finally {
+      setSearchBusy(false);
+    }
+  }
+
+  function addPlayer(player: Player) {
+    if (selected.length >= 3) return;
+    if (parseHandicap(player.handicap_index) === null) {
+      setSearchError('Tento hráč nemá platný handicap. Musí ho nejprve uložit ve svém profilu.');
+      return;
+    }
+    setSelected(prev => prev.some(p => p.id === player.id) ? prev : [...prev, player]);
+    setMatches(prev => prev.filter(p => p.id !== player.id));
+    setSearchError('');
+  }
+
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!course || !tee) {
@@ -64,22 +107,14 @@ export default function NewGame() {
       const { data: { user }, error: authError } = await supabase().auth.getUser();
       if (authError || !user) throw new Error('Nejprve se přihlas.');
 
-      // Profil v současné verzi může ukládat HCP do auth.user_metadata.
-      // Databázový profil použijeme jako záložní zdroj.
-      const metadata = user.user_metadata || {};
-      const metadataHcp = parseHandicap(
-        metadata.handicap_index ?? metadata.hcp ?? metadata.handicap
-      );
-      let handicap = metadataHcp;
-
-      if (handicap === null) {
-        const { data: profile, error: profileError } = await supabase()
-          .from('profiles')
-          .select('handicap_index')
-          .eq('id', user.id)
-          .maybeSingle();
-        if (!profileError) handicap = parseHandicap(profile?.handicap_index);
-      }
+       // Databázový profil je primární zdroj HCP.
+       const { data: profile, error: profileError } = await supabase()
+         .from('profiles').select('handicap_index').eq('id', user.id).maybeSingle();
+       if (profileError) throw profileError;
+       const metadata = user.user_metadata || {};
+       const handicap = parseHandicap(profile?.handicap_index) ?? parseHandicap(
+         metadata.handicap_index ?? metadata.hcp ?? metadata.handicap
+       );
 
       if (handicap === null) {
         throw new Error('V profilu není dostupný platný HCP. Otevři svůj profil, ulož handicap a zkus vytvořit hru znovu.');
@@ -100,17 +135,21 @@ export default function NewGame() {
         .single();
       if (gameError) throw gameError;
 
-      const { error: memberError } = await supabase().from('game_players')
-        .insert({
-          game_id: game.id,
-          player_id: user.id,
-          flight_number: 1,
-          handicap_snapshot: handicap,
-        });
-      if (memberError) {
-        await supabase().from('games').delete().eq('id', game.id);
-        throw memberError;
-      }
+       const participants = [
+         { game_id: game.id, player_id: user.id, flight_number: 1, handicap_snapshot: handicap },
+         ...selected.map(player => ({
+           game_id: game.id,
+           player_id: player.id,
+           flight_number: 1,
+           handicap_snapshot: parseHandicap(player.handicap_index)!,
+         })),
+       ];
+       const { error: memberError } = await supabase().from('game_players').insert(participants);
+       if (memberError) {
+         // Pokus o odstranění neúplné hry; pokud RLS smazání nepovolí, chybu zobrazíme.
+         const { error: cleanupError } = await supabase().from('games').delete().eq('id', game.id);
+         throw new Error(memberError.message + (cleanupError ? ' Hru se nepodařilo automaticky odstranit: ' + cleanupError.message : ''));
+       }
       router.push('/games/' + game.id);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Hru se nepodařilo vytvořit.');
