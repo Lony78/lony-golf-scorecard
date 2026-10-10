@@ -1,0 +1,2 @@
+import {NextRequest,NextResponse} from 'next/server';
+export async function GET(request:NextRequest){const token_hash=request.nextUrl.searchParams.get('token_hash');const type=request.nextUrl.searchParams.get('type');const code=request.nextUrl.searchParams.get('code');const next=new URL('/login',request.url);if(token_hash||code){next.searchParams.set('verified','1')}else{next.searchParams.set('error','missing_token')}return NextResponse.redirect(next)}
