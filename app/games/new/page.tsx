@@ -194,7 +194,52 @@ export default function NewGame() {
               <option value="stroke">Na rány</option>
             </select>
           </label>
-          <p className="muted">V této první verzi se do hry automaticky přidáš jako první hráč. Přidávání dalších hráčů připravujeme.</p>
+          <section aria-label="Spoluhráči" style={{ marginTop: 18, marginBottom: 18 }}>
+            <h2 style={{ fontSize: '1.15rem', marginBottom: 8 }}>Spoluhráči ({selected.length}/3)</h2>
+            <p className="muted">Ty jsi prvním hráčem. Do stejného flightu můžeš přidat až tři další registrované hráče podle přezdívky.</p>
+            <label className="field">Vyhledat podle přezdívky
+              <input
+                type="search"
+                value={search}
+                onChange={e => { setSearch(e.target.value); setMatches([]); setSearchError(''); }}
+                placeholder="Např. Petr"
+                minLength={2}
+                disabled={busy || selected.length >= 3}
+              />
+            </label>
+            <button
+              type="button"
+              className="btn secondary"
+              onClick={findPlayers}
+              disabled={busy || searchBusy || selected.length >= 3 || search.trim().length < 2}
+              style={{ marginTop: 8 }}
+            >
+              {searchBusy ? 'Hledám…' : 'Najít spoluhráče'}
+            </button>
+            {searchError && <p className="error" role="alert">{searchError}</p>}
+            {matches.length > 0 && (
+              <div style={{ marginTop: 12 }}>
+                <p className="muted">Nalezení hráči:</p>
+                {matches.map(player => (
+                  <div key={player.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 8 }}>
+                    <span>{player.nickname} · HCP {player.handicap_index ?? 'neuveden'}</span>
+                    <button type="button" onClick={() => addPlayer(player)} disabled={busy || selected.length >= 3}>Přidat</button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {selected.length > 0 && (
+              <div style={{ marginTop: 14 }}>
+                <p><strong>Vybraní spoluhráči:</strong></p>
+                {selected.map(player => (
+                  <div key={player.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 8 }}>
+                    <span>{player.nickname} · HCP {player.handicap_index}</span>
+                    <button type="button" onClick={() => setSelected(prev => prev.filter(p => p.id !== player.id))} disabled={busy}>Odebrat</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
           {courses.length === 0 && <p className="muted">Seznam hřišť je prázdný. Hřiště musí být nejprve vložena s ověřenými parametry.</p>}
           {error && <p className="error" role="alert">{error}</p>}
           <button className="btn secondary" disabled={busy}>{busy ? 'Ukládám…' : 'Vytvořit hru'}</button>
