@@ -37,6 +37,10 @@ export default function NewGame() {
   const [selected, setSelected] = useState<Player[]>([]);
   const [searchBusy, setSearchBusy] = useState(false);
   const [searchError, setSearchError] = useState('');
+  const [allPlayers, setAllPlayers] = useState<Player[]>([]);
+  const [playersBusy, setPlayersBusy] = useState(false);
+  const [playersError, setPlayersError] = useState('');
+  const [playerChoice, setPlayerChoice] = useState('');
 
   useEffect(() => {
     supabase().from('courses').select('id,name').order('name').then(({ data, error }) => {
@@ -57,6 +61,37 @@ export default function NewGame() {
         else setTees(data || []);
       });
   }, [course]);
+
+  useEffect(() => {
+    let active = true;
+    async function loadPlayers() {
+      setPlayersBusy(true);
+      setPlayersError('');
+      try {
+        const { data: { user }, error: authError } = await supabase().auth.getUser();
+        if (authError || !user) throw new Error('Nejprve se přihlas.');
+        const players: Player[] = [];
+        const pageSize = 500;
+        for (let start = 0; ; start += pageSize) {
+          const { data, error } = await supabase().from('profiles')
+            .select('id,nickname,handicap_index')
+            .order('nickname').order('id')
+            .range(start, start + pageSize - 1);
+          if (error) throw error;
+          const batch = data || [];
+          players.push(...batch.filter(p => p.id !== user.id && Boolean(p.nickname)));
+          if (batch.length < pageSize) break;
+        }
+        if (active) setAllPlayers(players);
+      } catch (e) {
+        if (active) setPlayersError(e instanceof Error ? e.message : 'Seznam hráčů se nepodařilo načíst.');
+      } finally {
+        if (active) setPlayersBusy(false);
+      }
+    }
+    void loadPlayers();
+    return () => { active = false; };
+  }, []);
 
   async function findPlayers() {
     setSearchError('');
@@ -88,10 +123,12 @@ export default function NewGame() {
     if (selected.length >= 3) return;
     if (parseHandicap(player.handicap_index) === null) {
       setSearchError('Tento hráč nemá platný handicap. Musí ho nejprve uložit ve svém profilu.');
+      setPlayerChoice('');
       return;
     }
     setSelected(prev => prev.some(p => p.id === player.id) ? prev : [...prev, player]);
     setMatches(prev => prev.filter(p => p.id !== player.id));
+    setPlayerChoice('');
     setSearchError('');
   }
 
@@ -196,7 +233,28 @@ export default function NewGame() {
           </label>
           <section aria-label="Spoluhráči" style={{ marginTop: 18, marginBottom: 18 }}>
             <h2 style={{ fontSize: '1.15rem', marginBottom: 8 }}>Spoluhráči ({selected.length}/3)</h2>
-            <p className="muted">Ty jsi prvním hráčem. Do stejného flightu můžeš přidat až tři další registrované hráče podle přezdívky.</p>
+            <p className="muted">Ty jsi prvním hráčem. Do stejného flightu můžeš přidat až tři další registrované hráče. Vyber je ze seznamu nebo vyhledej podle přezdívky.</p>
+            <label className="field">Vybrat ze seznamu registrovaných hráčů
+              <select
+                value={playerChoice}
+                onChange={e => {
+                  const id = e.target.value;
+                  setPlayerChoice(id);
+                  const player = allPlayers.find(p => p.id === id);
+                  if (player) addPlayer(player);
+                }}
+                disabled={busy || playersBusy || selected.length >= 3}
+              >
+                <option value="">{playersBusy ? 'Načítám hráče…' : 'Rozklikni a vyber hráče'}</option>
+                {allPlayers.filter(p => !selected.some(s => s.id === p.id)).map(p => (
+                  <option key={p.id} value={p.id}>
+                    {p.nickname} · HCP {p.handicap_index ?? 'neuveden'}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {playersError && <p className="error" role="alert">{playersError}</p>}
+            <p className="muted">Nebo použij vyhledávání:</p>
             <label className="field">Vyhledat podle přezdívky
               <input
                 type="search"
