@@ -5,11 +5,11 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabase';
 
-type Game = { id: string; name: string; organizer_id: string; play_date: string; status: string; scoring: string; holes_count: number; tee_id: string };
+type Game = { id: string; name: string; organizer_id: string; play_date: string; status: string; scoring: string; holes_count: number; tee_id: string; course_id: string };
 type Hole = { hole_number: number; par: number; stroke_index: number; length_m: number | null };
 type Score = { game_player_id: string; hole_number: number; strokes: number | null; picked_up: boolean };
-type Member = { id: string; player_id: string; handicap_snapshot: number | null; flight_number: number; finished_at: string | null; finish_reason: string | null; finish_note: string | null; nickname: string };
-type Rating = { course_rating: number | null; slope_rating: number | null };
+type Member = { id: string; player_id: string; handicap_snapshot: number | null; flight_number: number; finished_at: string | null; finish_reason: string | null; finish_note: string | null; tee_id: string | null; nickname: string };
+type Rating = { id: string; name: string; course_rating: number | null; slope_rating: number | null; par_total: number | null };
 
 export default function GameDetail() {
   const params = useParams();
@@ -20,7 +20,8 @@ export default function GameDetail() {
   const [members, setMembers] = useState<Member[]>([]);
   const [scores, setScores] = useState<Record<string, Record<number, Score>>>({});
   const [userId, setUserId] = useState('');
-  const [rating, setRating] = useState<Rating | null>(null);
+  const [ratings, setRatings] = useState<Record<string, Rating>>({});
+  const [teeHoles, setTeeHoles] = useState<Record<string, Hole[]>>({});
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
@@ -40,15 +41,15 @@ export default function GameDetail() {
     if (!user) { router.replace('/login'); return; }
     setUserId(user.id);
     const { data: g, error: ge } = await client.from('games')
-      .select('id,name,organizer_id,play_date,status,scoring,holes_count,tee_id')
+      .select('id,name,organizer_id,play_date,status,scoring,holes_count,tee_id,course_id')
       .eq('id', id).single();
     if (ge) throw ge;
     setGame(g as Game);
 
     const [h, t, p] = await Promise.all([
       client.from('holes').select('hole_number,par,stroke_index,length_m').eq('tee_id', g.tee_id).order('hole_number'),
-      client.from('course_tees').select('course_rating,slope_rating').eq('id', g.tee_id).single(),
-      client.from('game_players').select('id,player_id,handicap_snapshot,flight_number,finished_at,finish_reason,finish_note').eq('game_id', id).order('flight_number'),
+      client.from('course_tees').select('id,name,course_rating,slope_rating,par_total').eq('course_id', g.course_id),
+      client.from('game_players').select('id,player_id,handicap_snapshot,flight_number,finished_at,finish_reason,finish_note,tee_id').eq('game_id', id).order('flight_number'),
     ]);
     if (h.error) throw h.error;
     if (t.error) throw t.error;
@@ -75,7 +76,17 @@ export default function GameDetail() {
     setScores(grouped);
     setLastRefresh(new Date().toLocaleTimeString('cs-CZ'));
     setHoles((h.data || []) as Hole[]);
-    setRating(t.data as Rating);
+    const teeIds = [...new Set([g.tee_id, ...participants.map(player => player.tee_id || g.tee_id)])];
+    const { data: allHoleRows, error: allHolesError } = await client.from('holes')
+      .select('tee_id,hole_number,par,stroke_index,length_m').in('tee_id', teeIds).order('hole_number');
+    if (allHolesError) throw allHolesError;
+    const byTee: Record<string, Hole[]> = {};
+    for (const row of allHoleRows || []) {
+      if (!byTee[row.tee_id]) byTee[row.tee_id] = [];
+      byTee[row.tee_id].push({ hole_number: row.hole_number, par: row.par, stroke_index: row.stroke_index, length_m: row.length_m });
+    }
+    setTeeHoles(byTee);
+    setRatings(Object.fromEntries(((t.data || []) as Rating[]).map(item => [item.id, item])));
   }, [id, router]);
 
   useEffect(() => { load().catch(e => setError(e instanceof Error ? e.message : String(e))); }, [load]);
@@ -123,15 +134,23 @@ export default function GameDetail() {
 
   const expected = game?.holes_count || 18;
   const visible = holes.filter(h => h.hole_number <= expected);
-  const coursePar = holes.reduce((sum, h) => sum + h.par, 0);
+  function memberTeeId(member: Member): string { return member.tee_id || game?.tee_id || ''; }
+  function memberHoles(member: Member): Hole[] { return teeHoles[memberTeeId(member)] || []; }
+  function memberHole(member: Member, number: number): Hole | undefined {
+    return memberHoles(member).find(h => h.hole_number === number);
+  }
+  function teeName(member: Member): string { return ratings[memberTeeId(member)]?.name || 'Odpaliště'; }
   const myMember = members.find(member => member.player_id === userId);
   const activeHole = visible.find(h => h.hole_number === mobileHole) || visible[0];
   const activeScore = myMember && activeHole ? scores[myMember.id]?.[activeHole.hole_number] : undefined;
   const completedCount = myMember ? visible.filter(h => Boolean(scores[myMember.id]?.[h.hole_number])).length : 0;
 
   function playingHandicap(member: Member): number | null {
-    if (member.handicap_snapshot === null || rating?.course_rating == null || rating?.slope_rating == null || holes.length !== 18) return null;
-    return Math.round(Number(member.handicap_snapshot) * rating.slope_rating / 113 + rating.course_rating - coursePar);
+    const rating = ratings[memberTeeId(member)];
+    const ownHoles = memberHoles(member);
+    if (member.handicap_snapshot === null || rating?.course_rating == null || rating?.slope_rating == null || ownHoles.length !== 18) return null;
+    const par = ownHoles.reduce((sum, h) => sum + h.par, 0);
+    return Math.round(Number(member.handicap_snapshot) * rating.slope_rating / 113 + rating.course_rating - par);
   }
   function points(member: Member, hole: Hole): number | null {
     const score = scores[member.id]?.[hole.hole_number];
@@ -139,8 +158,10 @@ export default function GameDetail() {
     if (score.picked_up) return 0;
     const ch = playingHandicap(member);
     if (ch === null || expected !== 18 || score.strokes === null) return null;
-    const extra = Math.floor(ch / 18) + (hole.stroke_index <= ((ch % 18) + 18) % 18 ? 1 : 0);
-    return Math.max(0, 2 + hole.par + extra - score.strokes);
+    const ownHole = memberHole(member, hole.hole_number);
+    if (!ownHole) return null;
+    const extra = Math.floor(ch / 18) + (ownHole.stroke_index <= ((ch % 18) + 18) % 18 ? 1 : 0);
+    return Math.max(0, 2 + ownHole.par + extra - score.strokes);
   }
   function totalStrokes(member: Member): number {
     return visible.reduce((sum, h) => sum + (scores[member.id]?.[h.hole_number]?.strokes || 0), 0);
@@ -338,7 +359,7 @@ export default function GameDetail() {
         <p className="muted">Hráči ve flightu. Každý zapisuje pouze své vlastní výsledky ve společné scorekartě.</p>
         {members.map(member => <div key={member.id} className="btn secondary"
           style={{ display: 'block', width: '100%', marginBottom: 8, textAlign: 'left', cursor: 'default' }}>
-          {member.nickname}{member.player_id === userId ? ' (já)' : ''} · HCP {member.handicap_snapshot ?? '–'}
+          {member.nickname}{member.player_id === userId ? ' (já)' : ''} · {teeName(member)} · HCP {member.handicap_snapshot ?? '–'}
           {playingHandicap(member) !== null ? ` · Herní HCP ${playingHandicap(member)}` : ''}
           {member.finished_at ? ` · ${finishLabel(member)}` : ''}
         </div>)}
@@ -429,7 +450,7 @@ export default function GameDetail() {
             <span className="mobile-sub">{completedCount} z {expected} zapsáno</span>
           </div>
           {activeHole && <>
-            <p className="mobile-sub">PAR {activeHole.par} · SI {activeHole.stroke_index}{activeHole.length_m != null ? ` · ${activeHole.length_m} m` : ''}</p>
+            <p className="mobile-sub">{myMember ? teeName(myMember) : ''} · PAR {myMember ? memberHole(myMember, activeHole.hole_number)?.par ?? activeHole.par : activeHole.par} · SI {myMember ? memberHole(myMember, activeHole.hole_number)?.stroke_index ?? activeHole.stroke_index : activeHole.stroke_index}{(myMember ? memberHole(myMember, activeHole.hole_number)?.length_m : activeHole.length_m) != null ? ` · ${myMember ? memberHole(myMember, activeHole.hole_number)?.length_m : activeHole.length_m} m` : ''}</p>
             <div className="mobile-nav" style={{ marginTop: 7 }}>
               <div><strong>{myMember?.nickname || 'Moje skóre'}</strong><div className="mobile-sub">Herní HCP {myMember ? playingHandicap(myMember) ?? '–' : '–'}</div></div>
               <div style={{ textAlign: 'right' }}><strong>{myMember ? totalPoints(myMember) ?? '–' : '–'}</strong><div className="mobile-sub">Celkem bodů</div></div>
@@ -464,7 +485,7 @@ export default function GameDetail() {
                 {members.map(member => <Fragment key={member.id}><col className="player-col" />{game.scoring === 'stableford' && <col className="player-col" />}</Fragment>)}
               </colgroup>
               <thead>
-                <tr><th rowSpan={2} title="Jamka">J</th><th rowSpan={2}>PAR</th>{members.map((member, index) => <th key={member.id} className={`player-group-${index} player-start`} colSpan={game.scoring === 'stableford' ? 2 : 1} title={member.nickname}><span className="player-name">{member.nickname}{member.player_id === userId ? ' (já)' : ''}</span></th>)}</tr>
+                <tr><th rowSpan={2} title="Jamka">J</th><th rowSpan={2}>PAR</th>{members.map((member, index) => <th key={member.id} className={`player-group-${index} player-start`} colSpan={game.scoring === 'stableford' ? 2 : 1} title={member.nickname}><span className="player-name">{member.nickname}{member.player_id === userId ? ' (já)' : ''}</span><span className="player-name" style={{ fontWeight: 400 }}>{teeName(member)}</span></th>)}</tr>
                 <tr>{members.map((member, index) => <Fragment key={member.id}><th className={`player-group-${index} player-start stroke-value`} title="Rány">R</th>{game.scoring === 'stableford' && <th className={`player-group-${index} point-value`} title="Body">B</th>}</Fragment>)}</tr>
               </thead>
               <tbody>{visible.map(hole => <tr key={hole.hole_number}>
