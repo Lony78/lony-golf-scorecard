@@ -65,10 +65,10 @@ export default function Dashboard() {
   ];
   return <main className="lony-dashboard">
     <style>{`
-      .lony-dashboard { position: relative; isolation: isolate; overflow: hidden; max-width: 520px; min-height: 100dvh; background: #0b271a url('/golf-photo-bg.jpg') center bottom / cover no-repeat; }
+      .lony-dashboard { position: relative; isolation: isolate; overflow: hidden; max-width: 520px; min-height: 100dvh; background: #0b271a url('/golf-photo-final.jpg') center bottom / cover no-repeat; }
       .lony-dashboard::before { content: ''; position: absolute; inset: 0; z-index: -1; background: linear-gradient(180deg,rgba(7,28,18,.40) 0%,rgba(7,28,18,.12) 42%,rgba(7,28,18,0) 72%); pointer-events: none; }
       .lony-dashboard::after { content: ''; position: absolute; inset: 0; z-index: -1; background: radial-gradient(ellipse at 88% 48%,rgba(82,111,49,.15),transparent 47%); pointer-events: none; }
-      .lony-dashboard .lony-card { position: relative; overflow: hidden; min-width: 0; min-height: 120px; background: linear-gradient(145deg,#f7f9ee,#e9f1df); color: #203e2d; border-radius: 20px; padding: 18px; text-decoration: none; display: flex; flex-direction: column; justify-content: center; gap: 12px; box-shadow: 0 8px 22px rgba(0,0,0,.12); }
+      .lony-dashboard .lony-card { position: relative; overflow: hidden; min-width: 0; min-height: 120px; background: linear-gradient(145deg,#f7f9ee,#e9f1df); color: #203e2d; border-radius: 20px; padding: 18px; text-decoration: none; display: flex; flex-direction: column; justify-content: center; gap: 12px; box-shadow: 0 12px 28px rgba(0,0,0,.18); }
       .lony-dashboard .lony-card::before { content: ''; position: absolute; width: 160px; height: 145px; border-radius: 65% 0 0 0; right: -70px; bottom: -80px; background: rgba(151,187,137,.13); transform: rotate(-25deg); pointer-events: none; }
       .lony-dashboard .lony-card:focus-visible { outline: 3px solid #d9e7b5; outline-offset: 3px; }
       @media (min-width: 600px) { .lony-dashboard { border-left: 1px solid rgba(255,255,255,.06); border-right: 1px solid rgba(255,255,255,.06); } }
