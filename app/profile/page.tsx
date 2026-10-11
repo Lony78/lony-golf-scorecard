@@ -8,6 +8,8 @@ export default function Profile() {
   const [nickname,setNickname] = useState('');
   const [hcp,setHcp] = useState('');
   const [avatar,setAvatar] = useState('');
+  const [gender,setGender] = useState('');
+  const [preferredTeeColor,setPreferredTeeColor] = useState('');
   const [photo,setPhoto] = useState<File | null>(null);
   const [preview,setPreview] = useState('');
   const [info,setInfo] = useState('');
@@ -21,12 +23,14 @@ export default function Profile() {
         const {data:{user},error} = await client.auth.getUser();
         if (error) throw error;
         if (!user) {router.replace('/login');return;}
-        const {data:profile,error:pe} = await client.from('profiles').select('nickname,handicap_index').eq('id',user.id).maybeSingle();
+        const {data:profile,error:pe} = await client.from('profiles').select('nickname,handicap_index,gender,preferred_tee_color').eq('id',user.id).maybeSingle();
         if (pe) throw pe;
         if (!live) return;
         setNickname(String(profile?.nickname ?? user.user_metadata?.nickname ?? ''));
         setHcp(String(profile?.handicap_index ?? user.user_metadata?.handicap_index ?? 54));
         setAvatar(String(user.user_metadata?.avatar_url || ''));
+        setGender(String(profile?.gender ?? ''));
+        setPreferredTeeColor(String(profile?.preferred_tee_color ?? ''));
       } catch (e) { if (live) setInfo(e instanceof Error ? e.message : 'Profil se nepodařilo načíst.'); }
       finally { if (live) setLoading(false); }
     }
@@ -43,6 +47,7 @@ export default function Profile() {
     e.preventDefault();
     const trimmed = nickname.trim();const handicap = Number(hcp.replace(',','.'));
     if (!trimmed || !Number.isFinite(handicap) || handicap < -10 || handicap > 54) {setInfo('Zadej přezdívku a handicap od -10 do 54.');return;}
+    if (!gender || !preferredTeeColor) {setInfo('Vyber pohlaví a preferovaná odpaliště.');return;}
     setSaving(true);setInfo('');
     try {
       const client = supabase();
@@ -57,7 +62,7 @@ export default function Profile() {
         const {data:publicData} = client.storage.from('avatars').getPublicUrl(path);
         avatarUrl = publicData.publicUrl + '?v=' + Date.now();
       }
-      const {error:pe} = await client.from('profiles').upsert({id:user.id,nickname:trimmed,handicap_index:handicap},{onConflict:'id'});
+      const {error:pe} = await client.from('profiles').upsert({id:user.id,nickname:trimmed,handicap_index:handicap,gender,preferred_tee_color:preferredTeeColor},{onConflict:'id'});
       if (pe) throw pe;
       const {error:me} = await client.auth.updateUser({data:{nickname:trimmed,handicap_index:handicap,avatar_url:avatarUrl}});
       if (me) throw me;
@@ -75,6 +80,8 @@ export default function Profile() {
       </div>
       <label className="field">Přezdívka<input required maxLength={60} disabled={loading || saving} value={nickname} onChange={e=>setNickname(e.target.value)}/></label>
       <label className="field">Handicap Index<input type="number" min="-10" max="54" step="0.1" required disabled={loading || saving} value={hcp} onChange={e=>setHcp(e.target.value)}/></label>
+      <label className="field">Pohlaví<select required disabled={loading || saving} value={gender} onChange={e=>setGender(e.target.value)}><option value="">Vyber pohlaví</option><option value="male">Muž</option><option value="female">Žena</option></select></label>
+      <label className="field">Preferovaná odpaliště<select required disabled={loading || saving} value={preferredTeeColor} onChange={e=>setPreferredTeeColor(e.target.value)}><option value="">Vyber odpaliště</option><option value="white">Bílá</option><option value="yellow">Žlutá</option><option value="blue">Modrá</option><option value="red">Červená</option></select><small>Při vytváření hry se tato odpaliště předvyplní, pokud jsou na vybraném hřišti dostupná. Pro jednotlivou hru je lze změnit.</small></label>
       <button className="btn secondary" disabled={loading || saving}>{saving ? 'Ukládám…' : loading ? 'Načítám…' : 'Uložit profil'}</button>
     </form>
     {info && <p role="status" style={{overflowWrap:'anywhere'}}>{info}</p>}
