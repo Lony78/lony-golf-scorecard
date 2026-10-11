@@ -192,25 +192,31 @@ export default function GameDetail() {
     <style>{`
       .golf-mobile { display: none; }
       @media (max-width: 700px) {
-        main:has(.golf-mobile) { padding: 16px 12px 70px !important; width: 100% !important; max-width: 100% !important; }
-        main:has(.golf-mobile) > h1 { font-size: 25px; }
+        main:has(.golf-mobile) { padding: 10px 12px 45px !important; width: 100% !important; max-width: 100% !important; }
+        main:has(.golf-mobile) > h1 { font-size: 22px; margin: 6px 0 4px; }
+        main:has(.golf-mobile) > .brand { margin: 0 0 4px; font-size: 10px; }
+        main:has(.golf-mobile) > h1 + p { margin: 3px 0 8px; font-size: 12px; }
         .golf-desktop { display: none !important; }
         .golf-mobile { display: block; }
-        .golf-mobile .mobile-card { background: #fff; color: #123d2b; border-radius: 18px; padding: 18px; margin: 14px 0; }
+        .golf-mobile .mobile-card { background: #fff; color: #123d2b; border-radius: 15px; padding: 12px 14px; margin: 9px 0; }
         .golf-mobile .mobile-nav { display: flex; gap: 10px; justify-content: space-between; align-items: center; }
-        .golf-mobile .mobile-nav button { flex: 1; min-width: 0; padding: 14px 8px; border: 1px solid #c8d8ce; background: #f1f6f2; color: #123d2b; border-radius: 12px; font-size: 15px; font-weight: 700; }
+        .golf-mobile .mobile-nav button { flex: 1; min-width: 0; padding: 9px 5px; border: 1px solid #c8d8ce; background: #f1f6f2; color: #123d2b; border-radius: 10px; font-size: 13px; font-weight: 700; }
         .golf-mobile button:disabled { opacity: .45; }
-        .golf-mobile .mobile-stepper { display: flex; align-items: center; justify-content: center; gap: 25px; padding: 20px 0; }
-        .golf-mobile .mobile-stepper button { height: 66px; width: 66px; border-radius: 16px; border: 0; background: #103e2c; color: white; font-size: 34px; font-weight: 700; }
-        .golf-mobile .mobile-number { font-size: 52px; font-weight: 800; min-width: 65px; text-align: center; }
+        .golf-mobile .mobile-stepper { display: flex; align-items: center; justify-content: center; gap: 18px; padding: 8px 0; }
+        .golf-mobile .mobile-stepper button { height: 52px; width: 52px; border-radius: 12px; border: 0; background: #103e2c; color: white; font-size: 30px; font-weight: 700; }
+        .golf-mobile .mobile-number { font-size: 38px; font-weight: 800; min-width: 55px; text-align: center; }
         .golf-mobile .mobile-sub { color: #547163; font-size: 13px; }
         .golf-mobile .mobile-rows { width: 100%; border-collapse: collapse; }
         .golf-mobile .mobile-rows td { padding: 11px 2px; border-bottom: 1px solid #e1e9e3; }
         .golf-mobile .mobile-rows td:last-child { text-align: right; font-weight: 700; }
-        .golf-mobile .mobile-pill { padding: 12px; background: #e9f2eb; border-radius: 12px; text-align: center; }
-        .golf-mobile .mobile-action { width: 100%; padding: 13px; border: 1px solid #c8d8ce; border-radius: 12px; background: #f1f6f2; color: #123d2b; font-weight: 700; margin-top: 8px; }
+        .golf-mobile .mobile-pill { padding: 7px; background: #e9f2eb; border-radius: 12px; text-align: center; }
+        .golf-mobile .mobile-action { width: 100%; padding: 9px; border: 1px solid #c8d8ce; border-radius: 12px; background: #f1f6f2; color: #123d2b; font-weight: 700; margin-top: 8px; }
         .golf-mobile .mobile-holes { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
-        .golf-mobile .mobile-holes button { padding: 11px 0; border: 1px solid #c8d8ce; border-radius: 9px; background: #f5f8f5; color: #123d2b; }
+        .golf-mobile .mobile-holes button { padding: 8px 0; border: 1px solid #c8d8ce; border-radius: 9px; background: #f5f8f5; color: #123d2b; }
+        .golf-mobile .mobile-card:first-child > .mobile-nav:first-child strong { font-size: 19px; }
+        .golf-mobile .mobile-card:first-child > .mobile-sub { margin: 5px 0; }
+        .golf-mobile .mobile-card:first-child .mobile-nav { gap: 8px; }
+        .golf-mobile .mobile-card:first-child .mobile-nav button { min-height: 42px; }
         .golf-mobile .mobile-holes button.active { background: #103e2c; color: #fff; }
         .golf-mobile .mobile-holes button.recorded:not(.active) { background: #dcefe0; }
       }
@@ -302,7 +308,7 @@ export default function GameDetail() {
           </div>
           {activeHole && <>
             <p className="mobile-sub">PAR {activeHole.par} · SI {activeHole.stroke_index}{activeHole.length_m != null ? ` · ${activeHole.length_m} m` : ''}</p>
-            <div className="mobile-nav" style={{ marginTop: 16 }}>
+            <div className="mobile-nav" style={{ marginTop: 7 }}>
               <div><strong>{myMember?.nickname || 'Moje skóre'}</strong><div className="mobile-sub">Herní HCP {myMember ? playingHandicap(myMember) ?? '–' : '–'}</div></div>
               <div style={{ textAlign: 'right' }}><strong>{myMember ? totalPoints(myMember) ?? '–' : '–'}</strong><div className="mobile-sub">Celkem bodů</div></div>
             </div>
@@ -311,12 +317,12 @@ export default function GameDetail() {
               <div><div className="mobile-number">{activeScore?.picked_up ? 'X' : activeScore?.strokes ?? '–'}</div><div className="mobile-sub" style={{ textAlign: 'center' }}>ran</div></div>
               <button type="button" aria-label="Přidat ránu" disabled={!myMember || Boolean(myMember.finished_at) || busy || visible.length !== expected || (activeScore?.strokes ?? 0) >= 30} onClick={() => void save(activeHole.hole_number, String(activeScore?.strokes ? activeScore.strokes + 1 : 1))}>+</button>
             </div>
-            {game.scoring === 'stableford' && <div className="mobile-pill"><strong style={{ fontSize: 26 }}>{myMember ? points(myMember, activeHole) ?? '–' : '–'}</strong><div className="mobile-sub">Stableford bodů za jamku</div></div>}
-            <div className="mobile-nav" style={{ marginTop: 12 }}>
+            {game.scoring === 'stableford' && <div className="mobile-pill"><strong style={{ fontSize: 21 }}>{myMember ? points(myMember, activeHole) ?? '–' : '–'}</strong><div className="mobile-sub">Stableford bodů za jamku</div></div>}
+            <div className="mobile-nav" style={{ marginTop: 8 }}>
               <button type="button" disabled={!myMember || Boolean(myMember.finished_at) || busy || visible.length !== expected} onClick={() => void save(activeHole.hole_number, 'X')}>Zvednutý míč (X)</button>
               <button type="button" disabled={!myMember || Boolean(myMember.finished_at) || busy || visible.length !== expected || !activeScore} onClick={() => void save(activeHole.hole_number, '')}>Smazat skóre</button>
             </div>
-            <div className="mobile-nav" style={{ marginTop: 18 }}>
+            <div className="mobile-nav" style={{ marginTop: 8 }}>
               <button type="button" disabled={activeHole.hole_number <= 1} onClick={() => setMobileHole(Math.max(1, activeHole.hole_number - 1))}>← Předchozí</button>
               <button type="button" disabled={activeHole.hole_number >= expected} onClick={() => setMobileHole(Math.min(expected, activeHole.hole_number + 1))}>Další →</button>
             </div>
