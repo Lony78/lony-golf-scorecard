@@ -1,5 +1,6 @@
 'use client';
 
+import type { TouchEvent } from 'react';
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
@@ -29,6 +30,9 @@ export default function GameDetail() {
   const refreshingRef = useRef(false);
   const [lastRefresh, setLastRefresh] = useState('');
   const [mobileHole, setMobileHole] = useState(1);
+  const [selectedPlayerId, setSelectedPlayerId] = useState('');
+  const swipeStart = useRef<{ x: number; y: number } | null>(null);
+  const [desktopPlayerId, setDesktopPlayerId] = useState('');
   const [mobileView, setMobileView] = useState<'hole' | 'card'>('hole');
   const [showEarlyFinish, setShowEarlyFinish] = useState(false);
   const [earlyReason, setEarlyReason] = useState('Zranění');
@@ -142,8 +146,26 @@ export default function GameDetail() {
   function teeName(member: Member): string { return ratings[memberTeeId(member)]?.name || 'Odpaliště'; }
   const myMember = members.find(member => member.player_id === userId);
   const activeHole = visible.find(h => h.hole_number === mobileHole) || visible[0];
-  const activeScore = myMember && activeHole ? scores[myMember.id]?.[activeHole.hole_number] : undefined;
-  const completedCount = myMember ? visible.filter(h => Boolean(scores[myMember.id]?.[h.hole_number])).length : 0;
+  const desktopMember = members.find(member => member.id === desktopPlayerId) || myMember;
+  const selectedMember = members.find(member => member.id === selectedPlayerId) || myMember || members[0];
+  const activeScore = selectedMember && activeHole ? scores[selectedMember.id]?.[activeHole.hole_number] : undefined;
+  const completedCount = selectedMember ? visible.filter(h => Boolean(scores[selectedMember.id]?.[h.hole_number])).length : 0;
+  const ownCompletedCount = myMember ? visible.filter(h => Boolean(scores[myMember.id]?.[h.hole_number])).length : 0;
+  function switchPlayer(direction: number) {
+    if (busy || members.length < 2 || !selectedMember) return;
+    const index = members.findIndex(member => member.id === selectedMember.id);
+    setSelectedPlayerId(members[(index + direction + members.length) % members.length].id);
+  }
+  function onScoreTouchStart(e: TouchEvent<HTMLDivElement>) {
+    swipeStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  }
+  function onScoreTouchEnd(e: TouchEvent<HTMLDivElement>) {
+    if (!swipeStart.current) return;
+    const dx = e.changedTouches[0].clientX - swipeStart.current.x;
+    const dy = e.changedTouches[0].clientY - swipeStart.current.y;
+    swipeStart.current = null;
+    if (Math.abs(dx) > 65 && Math.abs(dx) > Math.abs(dy) * 1.4) switchPlayer(dx < 0 ? 1 : -1);
+  }
 
   function playingHandicap(member: Member): number | null {
     const rating = ratings[memberTeeId(member)];
@@ -174,8 +196,8 @@ export default function GameDetail() {
     return visible.length === expected && visible.every(h => Boolean(scores[member.id]?.[h.hole_number]));
   }
 
-  async function save(hole: number, value: string) {
-    if (!game || !myMember || myMember.finished_at || busy || visible.length !== expected) return;
+  async function save(hole: number, value: string, target: Member | undefined = selectedMember) {
+    if (!game || !myMember || myMember.finished_at || !target || target.finished_at || busy || visible.length !== expected) return;
     const picked_up = value === 'X';
     const strokes = picked_up || value === '' ? null : Number(value);
     if (!picked_up && strokes !== null && (!Number.isInteger(strokes) || strokes < 1 || strokes > 30)) {
@@ -186,13 +208,13 @@ export default function GameDetail() {
     try {
       const client = supabase();
       if (value === '') {
-        const { error: e } = await client.from('scores').delete().eq('game_player_id', myMember.id).eq('hole_number', hole);
+        const { error: e } = await client.from('scores').delete().eq('game_player_id', target.id).eq('hole_number', hole);
         if (e) throw e;
-        setScores(prev => { const next = { ...prev, [myMember.id]: { ...(prev[myMember.id] || {}) } }; delete next[myMember.id][hole]; return next; });
+        setScores(prev => { const next = { ...prev, [target.id]: { ...(prev[target.id] || {}) } }; delete next[target.id][hole]; return next; });
       } else {
-        const { error: e } = await client.from('scores').upsert({ game_id: id, game_player_id: myMember.id, hole_number: hole, strokes, picked_up, updated_at: new Date().toISOString() }, { onConflict: 'game_player_id,hole_number' });
+        const { error: e } = await client.from('scores').upsert({ game_id: id, game_player_id: target.id, hole_number: hole, strokes, picked_up, updated_at: new Date().toISOString() }, { onConflict: 'game_player_id,hole_number' });
         if (e) throw e;
-        setScores(prev => ({ ...prev, [myMember.id]: { ...(prev[myMember.id] || {}), [hole]: { game_player_id: myMember.id, hole_number: hole, strokes, picked_up } } }));
+        setScores(prev => ({ ...prev, [target.id]: { ...(prev[target.id] || {}), [hole]: { game_player_id: target.id, hole_number: hole, strokes, picked_up } } }));
       }
       setNotice('Skóre uloženo.');
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
@@ -314,6 +336,11 @@ export default function GameDetail() {
         .golf-mobile .mobile-pill strong { color: #174a32; }
         .golf-mobile .mobile-nav-next { background: #174a32 !important; color: #fff !important; border-color: #174a32 !important; }
         .golf-mobile .mobile-nav-next:disabled { opacity: .45; }
+        .golf-mobile .flight-player-strip { display: flex; gap: 7px; overflow-x: auto; padding: 3px 0 10px; scrollbar-width: thin; }
+        .golf-mobile .flight-player-strip button { flex: 1 0 0; min-width: 64px; border: 1px solid #d0dfd3; border-radius: 12px; background: #e9f1ea; color: #234b35; padding: 9px 4px; font-size: 12px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .golf-mobile .flight-player-strip button.selected { background: #174a32; color: white; border-color: #174a32; }
+        .golf-mobile .flight-player-strip button.finished { opacity: .55; }
+        .golf-mobile .flight-player-strip button:disabled { opacity: .55; }
         .golf-mobile .mobile-card:first-child > .mobile-nav:first-child strong { font-size: 20px; }
         .golf-mobile .mobile-pill { padding: 5px; }
         /* Kompaktni scorekarta: az ctyri hraci bez vodorovneho posouvani. */
@@ -413,19 +440,22 @@ export default function GameDetail() {
         {game.scoring === 'stableford' && expected !== 18 && <p className="muted">Stableford body jsou v této verzi dostupné pouze pro 18 jamek.</p>}
       </div>
       {myMember && <div className="panel golf-desktop">
-        <h2>Moje scorekarta – zápis ran</h2>
-        <p className="muted">Zde můžeš upravovat pouze své výsledky. Společná scorekarta je jen pro přehled.</p>
+        <h2>Zápis ran hráčů ve flightu</h2>
+        <label>Hráč: <select value={desktopMember?.id || ''} onChange={e => setDesktopPlayerId(e.target.value)} style={{ padding: 8, marginBottom: 12, color: '#123d2b', background: '#fff' }}>
+          {members.map(member => <option key={member.id} value={member.id}>{member.nickname}{member.finished_at ? ' (dokončeno)' : ''}</option>)}
+        </select></label>
+        <p className="muted">Rány může zapsat každý aktivní hráč flightu. Dokončení hry potvrzuje každý pouze za sebe.</p>
         <div className="score-scroll" style={{ overflowX: 'auto' }}><table className="score-table">
           <thead><tr><th>Jamka</th><th>PAR</th><th>Rány</th>{game.scoring === 'stableford' && <th>Body</th>}</tr></thead>
           <tbody>{visible.map(hole => {
-            const score = scores[myMember.id]?.[hole.hole_number];
+            const score = scores[desktopMember?.id || myMember.id]?.[hole.hole_number];
             return <tr key={hole.hole_number}><th>{hole.hole_number}</th><td>{hole.par}</td><td>
-              <select aria-label={`Moje rány, jamka ${hole.hole_number}`} disabled={busy || Boolean(myMember.finished_at) || visible.length !== expected} value={score?.picked_up ? 'X' : score?.strokes ?? ''} onChange={e => void save(hole.hole_number, e.target.value)}>
+              <select aria-label={`Moje rány, jamka ${hole.hole_number}`} disabled={busy || Boolean(myMember.finished_at) || Boolean(desktopMember?.finished_at) || visible.length !== expected} value={score?.picked_up ? 'X' : score?.strokes ?? ''} onChange={e => void save(hole.hole_number, e.target.value, desktopMember)}>
                 <option value="">–</option>
                 {Array.from({ length: 30 }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1}</option>)}
                 <option value="X">X</option>
               </select>
-            </td>{game.scoring === 'stableford' && <td>{points(myMember, hole) ?? '–'}</td>}</tr>;
+            </td>{game.scoring === 'stableford' && <td>{desktopMember ? (points(desktopMember, hole) ?? '–') : '–'}</td>}</tr>;
           })}</tbody>
         </table></div>
       </div>}
@@ -452,26 +482,32 @@ export default function GameDetail() {
           <button type="button" className={mobileView === 'card' ? 'selected' : ''} aria-pressed={mobileView === 'card'} onClick={() => setMobileView('card')}>Celá scorekarta</button>
         </div>
         {mobileView === 'hole' ? <>
-        <div className="mobile-card">
+        <div className="mobile-card" onTouchStart={onScoreTouchStart} onTouchEnd={onScoreTouchEnd}>
+          <div className="flight-player-strip" role="group" aria-label="Vybrat hráče pro zápis skóre">
+            {members.map(member => <button key={member.id} type="button" className={`${selectedMember?.id === member.id ? 'selected' : ''} ${member.finished_at ? 'finished' : ''}`} disabled={busy} aria-pressed={selectedMember?.id === member.id} onClick={() => setSelectedPlayerId(member.id)} title={member.finished_at ? 'Hráč dokončil hru – skóre nelze měnit' : member.nickname}>
+              {member.nickname}{member.player_id === userId ? ' (já)' : ''}{member.finished_at ? ' ✓' : ''}
+            </button>)}
+          </div>
           <div className="mobile-nav">
             <strong>Jamka {activeHole?.hole_number ?? '–'} / {expected}</strong>
             <span className="mobile-sub">{completedCount} z {expected} zapsáno</span>
           </div>
+          {selectedMember?.finished_at && <p className="mobile-sub" style={{ color: '#8a6034', fontWeight: 700 }}>Hráč již ukončil hru – skóre je pouze ke čtení.</p>}
           {activeHole && <>
-            <p className="mobile-sub">{myMember ? teeName(myMember) : ''} · PAR {myMember ? memberHole(myMember, activeHole.hole_number)?.par ?? activeHole.par : activeHole.par} · SI {myMember ? memberHole(myMember, activeHole.hole_number)?.stroke_index ?? activeHole.stroke_index : activeHole.stroke_index}{(myMember ? memberHole(myMember, activeHole.hole_number)?.length_m : activeHole.length_m) != null ? ` · ${myMember ? memberHole(myMember, activeHole.hole_number)?.length_m : activeHole.length_m} m` : ''}</p>
+            <p className="mobile-sub">{selectedMember ? teeName(selectedMember) : ''} · PAR {selectedMember ? memberHole(selectedMember, activeHole.hole_number)?.par ?? activeHole.par : activeHole.par} · SI {selectedMember ? memberHole(selectedMember, activeHole.hole_number)?.stroke_index ?? activeHole.stroke_index : activeHole.stroke_index}{(selectedMember ? memberHole(selectedMember, activeHole.hole_number)?.length_m : activeHole.length_m) != null ? ` · ${selectedMember ? memberHole(selectedMember, activeHole.hole_number)?.length_m : activeHole.length_m} m` : ''}</p>
             <div className="mobile-nav" style={{ marginTop: 7 }}>
-              <div><strong>{myMember?.nickname || 'Moje skóre'}</strong><div className="mobile-sub">Herní HCP {myMember ? playingHandicap(myMember) ?? '–' : '–'}</div></div>
-              <div style={{ textAlign: 'right' }}><strong>{myMember ? totalPoints(myMember) ?? '–' : '–'}</strong><div className="mobile-sub">Celkem bodů</div></div>
+              <div><strong>{selectedMember?.nickname || 'Moje skóre'}</strong><div className="mobile-sub">Herní HCP {selectedMember ? playingHandicap(selectedMember) ?? '–' : '–'}</div></div>
+              <div style={{ textAlign: 'right' }}><strong>{selectedMember ? totalPoints(selectedMember) ?? '–' : '–'}</strong><div className="mobile-sub">Celkem bodů</div></div>
             </div>
             <div className="mobile-stepper">
-              <button type="button" aria-label="Odebrat ránu" disabled={!myMember || Boolean(myMember.finished_at) || busy || visible.length !== expected || !activeScore?.strokes || activeScore.strokes <= 1} onClick={() => void save(activeHole.hole_number, String((activeScore?.strokes || 1) - 1))}>−</button>
+              <button type="button" aria-label="Odebrat ránu" disabled={!myMember || Boolean(myMember.finished_at) || !selectedMember || Boolean(selectedMember.finished_at) || busy || visible.length !== expected || !activeScore?.strokes || activeScore.strokes <= 1} onClick={() => void save(activeHole.hole_number, String((activeScore?.strokes || 1) - 1))}>−</button>
               <div><div className="mobile-number">{activeScore?.picked_up ? 'X' : activeScore?.strokes ?? '–'}</div><div className="mobile-sub" style={{ textAlign: 'center' }}>RÁNY</div></div>
-              <button type="button" aria-label="Přidat ránu" disabled={!myMember || Boolean(myMember.finished_at) || busy || visible.length !== expected || (activeScore?.strokes ?? 0) >= 30} onClick={() => void save(activeHole.hole_number, String(activeScore?.strokes ? activeScore.strokes + 1 : 1))}>+</button>
+              <button type="button" aria-label="Přidat ránu" disabled={!myMember || Boolean(myMember.finished_at) || !selectedMember || Boolean(selectedMember.finished_at) || busy || visible.length !== expected || (activeScore?.strokes ?? 0) >= 30} onClick={() => void save(activeHole.hole_number, String(activeScore?.strokes ? activeScore.strokes + 1 : 1))}>+</button>
             </div>
-            {game.scoring === 'stableford' && <div className="mobile-pill"><strong style={{ fontSize: 25 }}>{myMember ? points(myMember, activeHole) ?? '–' : '–'} {myMember && points(myMember, activeHole) === 1 ? 'bod' : 'body'}</strong><div className="mobile-sub">Stableford za jamku</div></div>}
+            {game.scoring === 'stableford' && <div className="mobile-pill"><strong style={{ fontSize: 25 }}>{selectedMember ? points(selectedMember, activeHole) ?? '–' : '–'} {selectedMember && points(selectedMember, activeHole) === 1 ? 'bod' : 'body'}</strong><div className="mobile-sub">Stableford za jamku</div></div>}
             <div className="mobile-minor-actions">
-              <button type="button" disabled={!myMember || Boolean(myMember.finished_at) || busy || visible.length !== expected} onClick={() => void save(activeHole.hole_number, 'X')}>Zvednutý míč (X)</button>
-              <button type="button" disabled={!myMember || Boolean(myMember.finished_at) || busy || visible.length !== expected || !activeScore} onClick={() => void save(activeHole.hole_number, '')}>Smazat skóre</button>
+              <button type="button" disabled={!myMember || Boolean(myMember.finished_at) || !selectedMember || Boolean(selectedMember.finished_at) || busy || visible.length !== expected} onClick={() => void save(activeHole.hole_number, 'X')}>Zvednutý míč (X)</button>
+              <button type="button" disabled={!myMember || Boolean(myMember.finished_at) || !selectedMember || Boolean(selectedMember.finished_at) || busy || visible.length !== expected || !activeScore} onClick={() => void save(activeHole.hole_number, '')}>Smazat skóre</button>
             </div>
             <div className="mobile-nav" style={{ marginTop: 8 }}>
               <button type="button" disabled={activeHole.hole_number <= 1} onClick={() => setMobileHole(Math.max(1, activeHole.hole_number - 1))}>← Předchozí</button>
@@ -481,7 +517,7 @@ export default function GameDetail() {
         </div>
         <div className="mobile-card">
           <h3 style={{ marginTop: 0 }}>Přehled jamek</h3>
-          <div className="mobile-holes">{visible.map(h => <button key={h.hole_number} type="button" className={`${mobileHole === h.hole_number ? 'active' : ''} ${myMember && scores[myMember.id]?.[h.hole_number] ? 'recorded' : ''}`} onClick={() => setMobileHole(h.hole_number)}>{h.hole_number}</button>)}</div>
+          <div className="mobile-holes">{visible.map(h => <button key={h.hole_number} type="button" className={`${mobileHole === h.hole_number ? 'active' : ''} ${selectedMember && scores[selectedMember.id]?.[h.hole_number] ? 'recorded' : ''}`} onClick={() => setMobileHole(h.hole_number)}>{h.hole_number}</button>)}</div>
         </div>
         </> : <div className="mobile-card">
           <h3 style={{ marginTop: 0 }}>Společná scorekarta flightu</h3>
@@ -519,7 +555,7 @@ export default function GameDetail() {
           <p className="mobile-sub">Aktualizace každých 5 sekund. {lastRefresh && `Naposledy ${lastRefresh}`}</p>
           <button type="button" className="mobile-action" onClick={() => void refreshResults()}>Aktualizovat výsledky</button>
         </div>
-        {myMember && <div className="mobile-card"><h3 style={{ marginTop: 0 }}>Dokončení hry</h3>{myMember.finished_at ? <p>{finishLabel(myMember)}{myMember.finish_note ? ` · ${myMember.finish_note}` : ''}</p> : <><p className="mobile-sub">Zapsáno {completedCount} z {expected} jamek. Hru lze dokončit až po vyplnění všech.</p><button type="button" className="mobile-action" disabled={busy || !complete(myMember)} onClick={() => void finish()}>Potvrdit dokončení hry</button>{earlyFinishControls()}</>}</div>}
+        {myMember && <div className="mobile-card"><h3 style={{ marginTop: 0 }}>Dokončení hry</h3>{myMember.finished_at ? <p>{finishLabel(myMember)}{myMember.finish_note ? ` · ${myMember.finish_note}` : ''}</p> : <><p className="mobile-sub">Zapsáno {ownCompletedCount} z {expected} jamek. Hru lze dokončit až po vyplnění všech.</p><button type="button" className="mobile-action" disabled={busy || !complete(myMember)} onClick={() => void finish()}>Potvrdit dokončení hry</button>{earlyFinishControls()}</>}</div>}
       </section>
       {notice && <p className="success" role="status">{notice}</p>}
       {error && <p className="error" role="alert">{error}</p>}
