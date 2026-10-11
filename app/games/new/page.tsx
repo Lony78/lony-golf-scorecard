@@ -305,6 +305,27 @@ export default function NewGame() {
         </form>
         <Link href="/games">← Zpět na moje hry</Link>
         <style>{`
+          /* Výběrové nabídky na PC: světlý systémový seznam i při tmavém motivu webu. */
+          .panel .field select {
+            color-scheme: light;
+            background-color: #ffffff !important;
+            color: #123d2b !important;
+            -webkit-text-fill-color: #123d2b;
+          }
+          .panel .field select:hover,
+          .panel .field select:focus {
+            background-color: #f1f7f2 !important;
+            color: #123d2b !important;
+            -webkit-text-fill-color: #123d2b;
+          }
+          .panel .field select option {
+            background-color: #ffffff;
+            color: #123d2b;
+          }
+          .panel .field select option:checked {
+            background-color: #dcecdf;
+            color: #123d2b;
+          }
           /* iOS Safari: datum nesmí mít vlastní minimální šířku ani přetékat z formuláře. */
           .field { min-width: 0; }
           .field input.new-game-date {
