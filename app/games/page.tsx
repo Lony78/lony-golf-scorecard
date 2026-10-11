@@ -87,6 +87,11 @@ export default function Games() {
         {leaving === entry.membershipId ? 'Odhlašuji…' : '🗑 Opustit hru'}
       </button>
     </div>)}
-    <p><Link href="/dashboard">← Zpět na přehled</Link></p>
+    <div style={{ marginTop: 22, marginBottom: 12 }}>
+      <Link href="/dashboard" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 9, minHeight: 44, padding: '10px 18px', borderRadius: 999, backgroundColor: '#e7f1ea', color: '#164b35', fontSize: 14, fontWeight: 650, textDecoration: 'none', lineHeight: 1.2, border: '1px solid #d5e6da', boxSizing: 'border-box' }}>
+        <span aria-hidden="true" style={{ fontSize: 19, lineHeight: 1 }}>←</span>
+        <span>Zpět na přehled</span>
+      </Link>
+    </div>
   </main>;
 }
