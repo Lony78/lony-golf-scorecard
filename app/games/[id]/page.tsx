@@ -419,6 +419,8 @@ export default function GameDetail() {
         .golf-mobile .mobile-pill strong { color: #174a32; }
         .golf-mobile .mobile-nav-next { background: #174a32 !important; color: #fff !important; border-color: #174a32 !important; }
         .golf-mobile .mobile-nav-next:disabled { opacity: .45; }
+        /* Swipe is clipped strictly to the score-entry tile, never the whole page. */
+        .golf-mobile .player-slide-viewport { position: relative; width: 100%; max-width: 100%; overflow: hidden; border-radius: 15px; touch-action: pan-y; overscroll-behavior-x: contain; isolation: isolate; }
         .golf-mobile .swipe-player-area { touch-action: pan-y; overscroll-behavior-x: contain; }
         .golf-mobile .flight-player-strip { display: flex; gap: 7px; overflow-x: auto; padding: 3px 0 10px; scrollbar-width: thin; }
         .golf-mobile .flight-player-strip button { flex: 1 0 0; min-width: 64px; border: 1px solid #d0dfd3; border-radius: 12px; background: #e9f1ea; color: #234b35; padding: 9px 4px; font-size: 12px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
