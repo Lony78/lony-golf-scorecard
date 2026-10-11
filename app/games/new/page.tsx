@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabase';
 
 type Course = { id: string; name: string };
-type Player = { id: string; nickname: string; handicap_index: number | null };
+type Player = { id: string; nickname: string; handicap_index: number | null; preferred_tee_color: string | null };
 type Tee = {
   id: string;
   name: string;
@@ -21,17 +21,30 @@ function parseHandicap(value: unknown): number | null {
   return Number.isFinite(number) && number >= -10 && number <= 54 ? number : null;
 }
 
+const teeColorNames: Record<string, string> = { white: 'bila', yellow: 'zluta', blue: 'modra', red: 'cervena' };
+function preferredTeeId(available: Tee[], preference: string | null | undefined): string | null {
+  const wanted = teeColorNames[preference || ''];
+  if (!wanted) return null;
+  const normalize = (value: string) => value.toLocaleLowerCase('cs').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  return available.find(item => normalize(item.name).split(/[^a-z]+/).includes(wanted))?.id ?? null;
+}
+
 export default function NewGame() {
   const router = useRouter();
   const [name, setName] = useState('Golfová hra');
   const [date, setDate] = useState(new Date().toLocaleDateString('en-CA'));
   const [course, setCourse] = useState('');
   const [tee, setTee] = useState('');
+  const [ownTeePreference, setOwnTeePreference] = useState<string | null>(null);
   const [playerTees, setPlayerTees] = useState<Record<string, string>>({});
   const [courses, setCourses] = useState<Course[]>([]);
   const [tees, setTees] = useState<Tee[]>([]);
   const selectedTee = tees.find(t => t.id === tee);
-  const teeForPlayer = (id: string) => playerTees[id] || tee;
+  const teeForPlayer = (id: string) => {
+    if (playerTees[id] && tees.some(t => t.id === playerTees[id])) return playerTees[id];
+    const player = allPlayers.find(p => p.id === id);
+    return preferredTeeId(tees, player?.preferred_tee_color) || tee;
+  };
   const [count, setCount] = useState(18);
   const [scoring, setScoring] = useState('stableford');
   const [error, setError] = useState('');
@@ -71,6 +84,12 @@ export default function NewGame() {
   }, [course]);
 
   useEffect(() => {
+    if (!tees.length || tee) return;
+    const preferred = preferredTeeId(tees, ownTeePreference);
+    if (preferred) setTee(preferred);
+  }, [tees, ownTeePreference, tee]);
+
+  useEffect(() => {
     let active = true;
     async function loadPlayers() {
       setPlayersBusy(true);
@@ -78,11 +97,15 @@ export default function NewGame() {
       try {
         const { data: { user }, error: authError } = await supabase().auth.getUser();
         if (authError || !user) throw new Error('Nejprve se přihlas.');
+        const { data: ownProfile, error: ownProfileError } = await supabase().from('profiles')
+          .select('preferred_tee_color').eq('id', user.id).maybeSingle();
+        if (ownProfileError) throw ownProfileError;
+        if (active) setOwnTeePreference(ownProfile?.preferred_tee_color ?? null);
         const players: Player[] = [];
         const pageSize = 500;
         for (let start = 0; ; start += pageSize) {
           const { data, error } = await supabase().from('profiles')
-            .select('id,nickname,handicap_index')
+            .select('id,nickname,handicap_index,preferred_tee_color')
             .order('nickname').order('id')
             .range(start, start + pageSize - 1);
           if (error) throw error;
@@ -146,6 +169,7 @@ export default function NewGame() {
       return;
     }
     setSelected(prev => prev.some(p => p.id === player.id) ? prev : [...prev, player]);
+    // Výchozí odpaliště spoluhráče se bere z jeho profilu; ruční změna ho přepíše jen v této hře.
     setSearch('');
     setShowPlayerList(false);
     setSearchError('');
@@ -281,7 +305,7 @@ export default function NewGame() {
                 CR: {selectedTee.course_rating ?? 'neuvedeno'} · SR: {selectedTee.slope_rating ?? 'neuvedeno'} · PAR: {selectedTee.par_total ?? 'neuvedeno'}
               </div>
               <div style={{ marginTop: 6, fontSize: 12 }}>
-                Toto je výchozí odpaliště organizátora a nově přidaných hráčů. U každého spoluhráče můžeš odpaliště změnit níže.
+                Odpaliště organizátora. Spoluhráči mají přednastavená vlastní preferovaná odpaliště z profilu, pokud jsou na hřišti dostupná.
               </div>
               {courses.find(c => c.id === course)?.name === 'Golf Resort Karlovy Vary' && (
                 <div style={{ marginTop: 6, fontSize: 12 }}>
