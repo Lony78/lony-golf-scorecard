@@ -77,7 +77,7 @@ export default function AdminPage() {
         <h2 style={{ margin:'0 0 8px',fontSize:21 }}>Správa aplikace</h2>
         {[
           ['♙','Správa hráčů','Profily, handicap a oprávnění','/admin/players'],
-          ['⚑','Golfová hřiště','Jamky, odpaliště, PAR, SI, CR/SR',null],
+          ['⚑','Golfová hřiště','Jamky, odpaliště, PAR, SI, CR/SR','/admin/courses'],
           ['▤','Správa her','Aktivní a dokončené hry',null],
           ['✎','Výsledky','Kontrola a opravy skóre',null],
           ['🏆','Žebříčky a statistiky','Výsledky a aktivita hráčů',null],
