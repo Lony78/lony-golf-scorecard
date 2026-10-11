@@ -5,11 +5,11 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../lib/supabase';
 
-type Member = { id: string; game_id: string; handicap_snapshot: number | null; finished_at: string | null; finish_reason: string | null; finish_note: string | null; flight_number: number | null };
+type Member = { id: string; game_id: string; handicap_snapshot: number | null; finished_at: string | null; finish_reason: string | null; finish_note: string | null; flight_number: number | null; tee_id: string | null };
 type Game = { id: string; name: string; play_date: string; holes_count: number; scoring: string; tee_id: string; course_id: string };
 type Hole = { hole_number: number; par: number; stroke_index: number };
 type Score = { game_player_id: string; hole_number: number; strokes: number | null; picked_up: boolean };
-type Entry = { game: Game; courseName: string; strokes: number; points: number | null; pickedUp: number; finishReason: string | null; finishNote: string | null; playedHoles: number; place: number | null; flightNumber: number | null };
+type Entry = { game: Game; courseName: string; strokes: number; points: number | null; pickedUp: number; finishReason: string | null; finishNote: string | null; playedHoles: number; place: number | null; flightNumber: number | null; teeName: string };
 
 function Trophy({ place }: { place: number }) {
   const colors = place === 1 ? ['#FFE88B', '#DFA51E', '#9B6605'] : place === 2 ? ['#F0F4F7', '#A8B3C1', '#6C798A'] : ['#F0BE88', '#BC7744', '#854B29'];
@@ -53,7 +53,7 @@ export default function HistoryPage() {
         if (authError) throw authError;
         if (!user) { router.replace('/login'); return; }
         const { data: own, error: membersError } = await client.from('game_players')
-          .select('id,game_id,handicap_snapshot,finished_at,finish_reason,finish_note,flight_number')
+          .select('id,game_id,handicap_snapshot,finished_at,finish_reason,finish_note,flight_number,tee_id')
           .eq('player_id', user.id).not('finished_at', 'is', null);
         if (membersError) throw membersError;
         const completed = (own || []) as Member[];
@@ -66,29 +66,57 @@ export default function HistoryPage() {
         const results = await Promise.all(((games || []) as Game[]).map(async game => {
           const member = completed.find(m => m.game_id === game.id);
           if (!member) return null;
-          const [scoreResult, holeResult, teeResult, courseResult, flightResult] = await Promise.all([
+          const [scoreResult, courseResult, flightResult] = await Promise.all([
             client.from('scores').select('game_player_id,hole_number,strokes,picked_up').eq('game_player_id', member.id),
-            client.from('holes').select('hole_number,par,stroke_index').eq('tee_id', game.tee_id).order('hole_number'),
-            client.from('course_tees').select('course_rating,slope_rating').eq('id', game.tee_id).maybeSingle(),
             client.from('courses').select('name').eq('id', game.course_id).maybeSingle(),
-            client.from('game_players').select('id,game_id,handicap_snapshot,finished_at,finish_reason,finish_note,flight_number').eq('game_id', game.id),
+            client.from('game_players').select('id,game_id,handicap_snapshot,finished_at,finish_reason,finish_note,flight_number,tee_id').eq('game_id', game.id),
           ]);
-          for (const result of [scoreResult, holeResult, teeResult, courseResult]) if (result.error) throw result.error;
+          if (scoreResult.error) throw scoreResult.error;
+          if (courseResult.error) throw courseResult.error;
+          if (flightResult.error) throw flightResult.error;
+
+          const flightMembers = (flightResult.data || []) as Member[];
+          const teeIds = [...new Set([member, ...flightMembers].map(p => p.tee_id || game.tee_id))];
+          const [holeResult, teeResult] = await Promise.all([
+            client.from('holes').select('tee_id,hole_number,par,stroke_index').in('tee_id', teeIds).order('hole_number'),
+            client.from('course_tees').select('id,name,course_rating,slope_rating').in('id', teeIds),
+          ]);
+          if (holeResult.error) throw holeResult.error;
+          if (teeResult.error) throw teeResult.error;
+
+          type TeeData = { id: string; name: string; course_rating: number | null; slope_rating: number | null };
+          type TeeHole = Hole & { tee_id: string };
+          const teeMap = new Map(((teeResult.data || []) as TeeData[]).map(t => [t.id, t]));
+          const holesByTee = new Map<string, Hole[]>();
+          for (const hole of (holeResult.data || []) as TeeHole[]) {
+            const existing = holesByTee.get(hole.tee_id) || [];
+            existing.push(hole);
+            holesByTee.set(hole.tee_id, existing);
+          }
+          const teeFor = (player: Member) => player.tee_id || game.tee_id;
+          const holesFor = (player: Member) => holesByTee.get(teeFor(player)) || [];
+          const pointsFor = (player: Member, playerScores: Score[]) => {
+            const tee = teeMap.get(teeFor(player));
+            return calculatePoints(
+              player, playerScores, holesFor(player),
+              tee?.course_rating == null ? null : Number(tee.course_rating),
+              tee?.slope_rating == null ? null : Number(tee.slope_rating),
+              game.holes_count
+            );
+          };
+
           const scores = (scoreResult.data || []) as Score[];
-          const holes = (holeResult.data || []) as Hole[];
-          const visible = holes.filter(h => h.hole_number <= game.holes_count);
+          const visible = holesFor(member).filter(h => h.hole_number <= game.holes_count);
           const byHole = new Map(scores.map(s => [s.hole_number, s]));
           const strokes = scores.reduce((sum, s) => sum + (s.strokes ?? 0), 0);
           const pickedUp = scores.filter(s => s.picked_up).length;
           const playedHoles = visible.filter(h => byHole.has(h.hole_number)).length;
-          const rating = teeResult.data?.course_rating == null ? null : Number(teeResult.data.course_rating);
-          const slope = teeResult.data?.slope_rating == null ? null : Number(teeResult.data.slope_rating);
-          const points = game.scoring === 'stableford' ? calculatePoints(member, scores, holes, rating, slope, game.holes_count) : null;
+          const points = game.scoring === 'stableford' ? pointsFor(member, scores) : null;
+          const teeName = teeMap.get(teeFor(member))?.name || 'Neuvedeno';
           let place: number | null = null;
-          // Flight ranking is displayed only when all flight participants have finished
-          // and their results can be read. Withdrawn players are never ranked.
-          if (!member.finish_reason && !flightResult.error && member.flight_number !== null) {
-            const flight = ((flightResult.data || []) as Member[]).filter(p => p.flight_number === member.flight_number);
+          // Pořadí až po dokončení celého flightu, bez předčasně ukončených hráčů.
+          if (!member.finish_reason && member.flight_number !== null) {
+            const flight = flightMembers.filter(p => p.flight_number === member.flight_number);
             if (flight.length > 0 && flight.every(p => p.finished_at !== null)) {
               const { data: allScores, error: allScoresError } = await client.from('scores')
                 .select('game_player_id,hole_number,strokes,picked_up').in('game_player_id', flight.map(p => p.id));
@@ -96,13 +124,14 @@ export default function HistoryPage() {
                 const all = (allScores || []) as Score[];
                 const ranked = flight.filter(p => !p.finish_reason).map(p => {
                   const ps = all.filter(s => s.game_player_id === p.id);
-                  const valid = visible.every(h => ps.some(s => s.hole_number === h.hole_number));
+                  const playerHoles = holesFor(p).filter(h => h.hole_number <= game.holes_count);
+                  const valid = playerHoles.length === game.holes_count && playerHoles.every(h => ps.some(s => s.hole_number === h.hole_number));
                   const value = game.scoring === 'stableford'
-                    ? calculatePoints(p, ps, holes, rating, slope, game.holes_count)
+                    ? pointsFor(p, ps)
                     : ps.reduce((sum, s) => sum + (s.strokes ?? 0), 0);
                   return { id: p.id, value, valid: valid && value !== null && (game.scoring === 'stableford' || ps.every(s => !s.picked_up && s.strokes !== null)) };
                 });
-                if (ranked.length === flight.filter(p => !p.finish_reason).length && ranked.every(p => p.valid)) {
+                if (ranked.every(p => p.valid)) {
                   ranked.sort((a, b) => game.scoring === 'stableford' ? Number(b.value) - Number(a.value) : Number(a.value) - Number(b.value));
                   const ownIndex = ranked.findIndex(p => p.id === member.id);
                   if (ownIndex >= 0) place = ranked.findIndex(p => p.value === ranked[ownIndex].value) + 1;
@@ -110,7 +139,7 @@ export default function HistoryPage() {
               }
             }
           }
-          return { game, courseName: courseResult.data?.name || 'Hřiště neuvedeno', strokes, points, pickedUp, finishReason: member.finish_reason, finishNote: member.finish_note, playedHoles, place, flightNumber: member.flight_number } as Entry;
+          return { game, courseName: courseResult.data?.name || 'Hřiště neuvedeno', strokes, points, pickedUp, finishReason: member.finish_reason, finishNote: member.finish_note, playedHoles, place, flightNumber: member.flight_number, teeName } as Entry;
         }));
         if (active) setEntries(results.filter((entry): entry is Entry => entry !== null));
       } catch (err) {
@@ -131,7 +160,7 @@ export default function HistoryPage() {
       {!loading && !error && entries.length === 0 && <p>Zatím nemáš žádnou ukončenou hru.</p>}
       {!loading && !error && <div style={{ display: 'grid', gap: 12 }}>
         {entries.map(entry => {
-          const { game, courseName, strokes, points, pickedUp, finishReason, finishNote, playedHoles, place, flightNumber } = entry;
+          const { game, courseName, strokes, points, pickedUp, finishReason, finishNote, playedHoles, place, flightNumber, teeName } = entry;
           const isOpen = opened === game.id;
           return <div key={game.id} style={{ borderRadius: 14, background: '#eef3e5', color: '#173b29', overflow: 'hidden' }}>
             <button type="button" onClick={() => setOpened(isOpen ? null : game.id)} aria-expanded={isOpen}
@@ -159,6 +188,7 @@ export default function HistoryPage() {
               {finishReason && <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}><span>Důvod</span><strong style={{ textAlign: 'right' }}>{finishReason}</strong></div>}
               {finishNote && <div><span>Poznámka:</span><div style={{ marginTop: 3, overflowWrap: 'anywhere' }}>{finishNote}</div></div>}
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}><span>Odehráno jamek</span><strong>{playedHoles} z {game.holes_count}</strong></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}><span>Odpaliště</span><strong>{teeName}</strong></div>
               {pickedUp > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}><span>Zvednutý míč</span><strong>{pickedUp}× X</strong></div>}
               {flightNumber !== null && <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}><span>Flight</span><strong>{flightNumber}</strong></div>}
               {finishReason && <span style={{ fontSize: 11, opacity: .8 }}>Předčasně ukončený hráč se nezapočítává do pořadí.</span>}
