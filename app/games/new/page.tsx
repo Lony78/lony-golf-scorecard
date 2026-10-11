@@ -382,7 +382,8 @@ export default function NewGame() {
               <div style={{ marginTop: 14 }}>
                 <p><strong>Vybraní spoluhráči:</strong></p>
                 {selected.map(player => (
-                  <div key={player.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 8 }}>
+                  <div key={player.id}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 8 }}>
                     <span>{player.nickname} · HCP {player.handicap_index}</span>
                     <button type="button" onClick={() => { setSelected(prev => prev.filter(p => p.id !== player.id)); setPlayerTees(prev => { const next = { ...prev }; delete next[player.id]; return next; }); }} disabled={busy}>Odebrat</button>
                   </div>
@@ -391,6 +392,7 @@ export default function NewGame() {
                       {tees.map(t => <option key={t.id} value={t.id}>{t.name} · CR {t.course_rating ?? '–'} · SR {t.slope_rating ?? '–'}</option>)}
                     </select>
                   </label>
+                  </div>
                 ))}
               </div>
             )}
