@@ -248,7 +248,7 @@ export default function GameDetail() {
         .golf-mobile .mobile-score-table thead .player-group-1 { background: #d0dffc; }
         .golf-mobile .mobile-score-table thead .player-group-2 { background: #f9dfb6; }
         .golf-mobile .mobile-score-table thead .player-group-3 { background: #e4d5f1; }
-        .golf-mobile .mobile-score-table .my-score { box-shadow: inset 0 0 0 1px #81a995; }
+        .golf-mobile .mobile-score-table .my-score { font-weight: 700; box-shadow: inset 0 0 0 1px #81a995; }
         .golf-mobile .mobile-score-table .player-name { font-size: clamp(7px, 2.2vw, 11px); }
         .golf-mobile .mobile-score-table select { font-size: 11px; }
         .golf-mobile .mobile-score-table .player-col { width: auto; }
@@ -273,7 +273,7 @@ export default function GameDetail() {
       </div>
       <div className="panel golf-desktop">
         <h2>Společná scorekarta flightu</h2>
-        <p className="muted">Všichni hráči na jedné scorekartě. Své rány můžeš zapisovat přímo zde; ostatní hráče můžeš pouze sledovat. Na mobilu posuň tabulku do strany.</p>
+        <p className="muted">Všichni hráči na jedné scorekartě. Přehled výsledků všech hráčů bez možnosti úprav. Rány zapisuj pouze ve své scorekartě.</p>
         {visible.length !== expected && <p className="error">Hřiště nemá všech {expected} jamek. Zápis není dostupný.</p>}
         <div className="score-scroll" style={{ overflowX: 'auto', maxWidth: '100%' }}>
           <table className="score-table" style={{ minWidth: 290 + members.length * (game.scoring === 'stableford' ? 145 : 85) }}>
@@ -292,19 +292,9 @@ export default function GameDetail() {
                 <th scope="row">{hole.hole_number}</th><td>{hole.par}</td>
                 {members.map((member, index) => {
                   const score = scores[member.id]?.[hole.hole_number];
-                  const editable = member.player_id === userId && !member.finished_at && visible.length === expected;
                   return <Fragment key={member.id}>
-                    <td style={{ background: member.player_id === userId ? 'rgba(45,130,85,0.08)' : undefined }}>
-                      {editable ? <select
-                        aria-label={`Rány ${member.nickname}, jamka ${hole.hole_number} – společná scorekarta`}
-                        disabled={busy}
-                        value={score?.picked_up ? 'X' : score?.strokes ?? ''}
-                        onChange={e => void save(hole.hole_number, e.target.value)}
-                      >
-                        <option value="">–</option>
-                        {Array.from({ length: 30 }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1}</option>)}
-                        <option value="X">X</option>
-                      </select> : score?.picked_up ? 'X' : score?.strokes ?? '–'}
+                    <td className={`player-group-${index} player-start`}>
+                      {score?.picked_up ? 'X' : score?.strokes ?? '–'}
                     </td>
                     {game.scoring === 'stableford' && <td className={`player-group-${index}`}>{points(member, hole) ?? '–'}</td>}
                   </Fragment>;
@@ -319,6 +309,23 @@ export default function GameDetail() {
         </div>
         {game.scoring === 'stableford' && expected !== 18 && <p className="muted">Stableford body jsou v této verzi dostupné pouze pro 18 jamek.</p>}
       </div>
+      {myMember && <div className="panel golf-desktop">
+        <h2>Moje scorekarta – zápis ran</h2>
+        <p className="muted">Zde můžeš upravovat pouze své výsledky. Společná scorekarta je jen pro přehled.</p>
+        <div className="score-scroll" style={{ overflowX: 'auto' }}><table className="score-table">
+          <thead><tr><th>Jamka</th><th>PAR</th><th>Rány</th>{game.scoring === 'stableford' && <th>Body</th>}</tr></thead>
+          <tbody>{visible.map(hole => {
+            const score = scores[myMember.id]?.[hole.hole_number];
+            return <tr key={hole.hole_number}><th>{hole.hole_number}</th><td>{hole.par}</td><td>
+              <select aria-label={`Moje rány, jamka ${hole.hole_number}`} disabled={busy || Boolean(myMember.finished_at) || visible.length !== expected} value={score?.picked_up ? 'X' : score?.strokes ?? ''} onChange={e => void save(hole.hole_number, e.target.value)}>
+                <option value="">–</option>
+                {Array.from({ length: 30 }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1}</option>)}
+                <option value="X">X</option>
+              </select>
+            </td>{game.scoring === 'stableford' && <td>{points(myMember, hole) ?? '–'}</td>}</tr>;
+          })}</tbody>
+        </table></div>
+      </div>}
       {myMember && <div className="panel golf-desktop">
         <h2>Dokončení hry</h2>
         {myMember.finished_at ? <p className="success">Hru jsi dokončil.</p> :
@@ -373,7 +380,7 @@ export default function GameDetail() {
         </div>
         </> : <div className="mobile-card">
           <h3 style={{ marginTop: 0 }}>Společná scorekarta flightu</h3>
-          <p className="mobile-sub">Všech {expected} jamek a všichni hráči pohromadě. Klepnutím na číslo ran upravíš svůj výsledek.</p>
+          <p className="mobile-sub">Všech {expected} jamek a všichni hráči pohromadě. Tento přehled je pouze ke čtení. Své rány upravíš v záložce Aktuální jamka.</p>
           <div className="mobile-score-scroll">
             <table className="mobile-score-table">
               <colgroup>
@@ -388,14 +395,9 @@ export default function GameDetail() {
                 <th>{hole.hole_number}</th><td>{hole.par}</td>
                 {members.map((member, index) => {
                   const score = scores[member.id]?.[hole.hole_number];
-                  const editable = member.player_id === userId && !member.finished_at && visible.length === expected;
                   return <Fragment key={member.id}>
                     <td className={`player-group-${index} player-start ${member.player_id === userId ? 'my-score' : ''}`}>
-                      {editable ? <select aria-label={`Rány ${member.nickname}, jamka ${hole.hole_number}`} disabled={busy} value={score?.picked_up ? 'X' : score?.strokes ?? ''} onChange={e => void save(hole.hole_number, e.target.value)}>
-                        <option value="">–</option>
-                        {Array.from({ length: 30 }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1}</option>)}
-                        <option value="X">X</option>
-                      </select> : score?.picked_up ? 'X' : score?.strokes ?? '–'}
+                      {score?.picked_up ? 'X' : score?.strokes ?? '–'}
                     </td>
                     {game.scoring === 'stableford' && <td className={`player-group-${index}`}>{points(member, hole) ?? '–'}</td>}
                   </Fragment>;
