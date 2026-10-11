@@ -228,7 +228,7 @@ export default function NewGame() {
           <div role="status" style={{ padding: 16, borderRadius: 12, background: '#edf4ee', color: '#123d2b' }}>
             <h2 style={{ marginTop: 0 }}>Již máš aktivní hru</h2>
             <p>Nejdříve ji dokonči nebo opusť, potom můžeš vytvořit novou.</p>
-            <Link className="btn secondary" href={'/games/' + activeGameId}>Přejít na aktivní hru →</Link>
+            <Link href={'/games/' + activeGameId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', minHeight: 48, boxSizing: 'border-box', padding: '12px 16px', borderRadius: 10, background: '#123d2b', color: '#ffffff', fontWeight: 700, textDecoration: 'none', textAlign: 'center' }}>Přejít na aktivní hru</Link>
           </div>
         ) : <form onSubmit={submit}>
           <label className="field">Název hry
