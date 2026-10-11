@@ -114,7 +114,7 @@ export default function GameDetail() {
   useEffect(() => {
     const timer = window.setInterval(() => {
       if (document.visibilityState === 'visible') void refreshResults();
-    }, 10000);
+    }, 5000);
     return () => window.clearInterval(timer);
   }, [refreshResults]);
 
@@ -203,7 +203,7 @@ export default function GameDetail() {
           {playingHandicap(member) !== null ? ` · Herní HCP ${playingHandicap(member)}` : ''}
           {member.finished_at ? ' · Dokončeno' : ''}
         </button>)}
-        <p className="muted">Výsledky se automaticky aktualizují každých 10 sekund, když je stránka otevřená. {lastRefresh && `Poslední aktualizace: ${lastRefresh}`}</p>
+        <p className="muted">Výsledky se automaticky aktualizují každých 5 sekund, když je stránka otevřená. {lastRefresh && `Poslední aktualizace: ${lastRefresh}`}</p>
         <button type="button" className="btn secondary" onClick={() => void refreshResults()}>Aktualizovat výsledky</button>
       </div>
       {selected && <div className="panel">
@@ -239,7 +239,7 @@ export default function GameDetail() {
             <tr key={member.id}><td>{member.nickname}</td><td>{member.handicap_snapshot ?? '–'}</td><td>{totalStrokes(member)}</td>
               {game.scoring === 'stableford' && <td>{totalPoints(member) ?? '–'}</td>}</tr>)}</tbody>
         </table></div>
-        <p className="muted">Pořadí je průběžné. Nula ran může znamenat, že hráč ještě nezapsal výsledek. Výsledky ostatních hráčů se načítají automaticky každých 10 sekund.</p>
+        <p className="muted">Pořadí je průběžné. Nula ran může znamenat, že hráč ještě nezapsal výsledek. Výsledky ostatních hráčů se načítají automaticky každých 5 sekund.</p>
       </div>
       {notice && <p className="success" role="status">{notice}</p>}
       {error && <p className="error" role="alert">{error}</p>}
