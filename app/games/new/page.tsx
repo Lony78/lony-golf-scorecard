@@ -27,9 +27,11 @@ export default function NewGame() {
   const [date, setDate] = useState(new Date().toLocaleDateString('en-CA'));
   const [course, setCourse] = useState('');
   const [tee, setTee] = useState('');
+  const [playerTees, setPlayerTees] = useState<Record<string, string>>({});
   const [courses, setCourses] = useState<Course[]>([]);
   const [tees, setTees] = useState<Tee[]>([]);
   const selectedTee = tees.find(t => t.id === tee);
+  const teeForPlayer = (id: string) => playerTees[id] || tee;
   const [count, setCount] = useState(18);
   const [scoring, setScoring] = useState('stableford');
   const [error, setError] = useState('');
@@ -56,6 +58,7 @@ export default function NewGame() {
   useEffect(() => {
     setTee('');
     setTees([]);
+    setPlayerTees({});
     if (!course) return;
     supabase().from('course_tees')
       .select('id,name,course_rating,slope_rating,par_total')
@@ -207,12 +210,13 @@ export default function NewGame() {
       if (gameError) throw gameError;
 
        const participants = [
-         { game_id: game.id, player_id: user.id, flight_number: 1, handicap_snapshot: handicap },
+         { game_id: game.id, player_id: user.id, flight_number: 1, handicap_snapshot: handicap, tee_id: tee },
          ...selected.map(player => ({
            game_id: game.id,
            player_id: player.id,
            flight_number: 1,
            handicap_snapshot: parseHandicap(player.handicap_index)!,
+           tee_id: teeForPlayer(player.id),
          })),
        ];
        const { error: memberError } = await supabase().from('game_players').insert(participants);
@@ -277,7 +281,7 @@ export default function NewGame() {
                 CR: {selectedTee.course_rating ?? 'neuvedeno'} · SR: {selectedTee.slope_rating ?? 'neuvedeno'} · PAR: {selectedTee.par_total ?? 'neuvedeno'}
               </div>
               <div style={{ marginTop: 6, fontSize: 12 }}>
-                Prozatím platí vybrané odpaliště pro všechny hráče této hry. Individuální odpaliště připravíme v dalším kroku.
+                Toto je výchozí odpaliště organizátora a nově přidaných hráčů. U každého spoluhráče můžeš odpaliště změnit níže.
               </div>
               {courses.find(c => c.id === course)?.name === 'Golf Resort Karlovy Vary' && (
                 <div style={{ marginTop: 6, fontSize: 12 }}>
@@ -370,14 +374,23 @@ export default function NewGame() {
                   ) : !playersError ? <p className="muted">Žádný odpovídající hráč.</p> : null}
               </div>
             )}
+            {tee && <div style={{ marginTop: 14, padding: 12, border: '1px solid #d5e6da', borderRadius: 10, background: '#f1f6f2', color: '#123d2b' }}>
+              <strong>Moje odpaliště (organizátor)</strong>
+              <p style={{ margin: '5px 0 0', fontSize: 13 }}>{selectedTee?.name || '–'} · CR {selectedTee?.course_rating ?? '–'} · SR {selectedTee?.slope_rating ?? '–'}</p>
+            </div>}
             {selected.length > 0 && (
               <div style={{ marginTop: 14 }}>
                 <p><strong>Vybraní spoluhráči:</strong></p>
                 {selected.map(player => (
                   <div key={player.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 8 }}>
                     <span>{player.nickname} · HCP {player.handicap_index}</span>
-                    <button type="button" onClick={() => setSelected(prev => prev.filter(p => p.id !== player.id))} disabled={busy}>Odebrat</button>
+                    <button type="button" onClick={() => { setSelected(prev => prev.filter(p => p.id !== player.id)); setPlayerTees(prev => { const next = { ...prev }; delete next[player.id]; return next; }); }} disabled={busy}>Odebrat</button>
                   </div>
+                  <label className="field" style={{ marginBottom: 14 }}>Odpaliště hráče {player.nickname}
+                    <select disabled={busy || !tee} value={teeForPlayer(player.id)} onChange={e => setPlayerTees(prev => ({ ...prev, [player.id]: e.target.value }))}>
+                      {tees.map(t => <option key={t.id} value={t.id}>{t.name} · CR {t.course_rating ?? '–'} · SR {t.slope_rating ?? '–'}</option>)}
+                    </select>
+                  </label>
                 ))}
               </div>
             )}
