@@ -306,7 +306,15 @@ export default function GameDetail() {
         .golf-mobile .mobile-minor-actions button { flex: 0 1 auto; min-height: 34px; padding: 6px 10px; font-size: 11px; font-weight: 500; background: #f5f8f5; color: #547163; border: 1px solid #d8e3da; border-radius: 8px; }
         .golf-mobile .mobile-minor-actions button:disabled { opacity: .4; }
         .golf-mobile .mobile-card { padding: 11px 12px; margin: 7px 0; }
-        .golf-mobile .mobile-stepper { padding: 3px 0; }
+        .golf-mobile .mobile-stepper { padding: 14px 0 10px; gap: 22px; }
+        .golf-mobile .mobile-stepper button { height: 64px; width: 64px; border-radius: 15px; font-size: 36px; box-shadow: 0 4px 10px rgba(16,62,44,.15); touch-action: manipulation; }
+        .golf-mobile .mobile-number { font-size: 54px; line-height: 1.05; min-width: 70px; }
+        .golf-mobile .mobile-stepper .mobile-sub { margin-top: 5px; font-size: 12px; font-weight: 700; letter-spacing: .08em; }
+        .golf-mobile .mobile-pill { padding: 13px 8px; background: #e0eee3; }
+        .golf-mobile .mobile-pill strong { color: #174a32; }
+        .golf-mobile .mobile-nav-next { background: #174a32 !important; color: #fff !important; border-color: #174a32 !important; }
+        .golf-mobile .mobile-nav-next:disabled { opacity: .45; }
+        .golf-mobile .mobile-card:first-child > .mobile-nav:first-child strong { font-size: 20px; }
         .golf-mobile .mobile-pill { padding: 5px; }
         /* Kompaktni scorekarta: az ctyri hraci bez vodorovneho posouvani. */
         .golf-mobile .mobile-score-scroll { width: 100%; overflow-x: hidden; }
@@ -457,17 +465,17 @@ export default function GameDetail() {
             </div>
             <div className="mobile-stepper">
               <button type="button" aria-label="Odebrat ránu" disabled={!myMember || Boolean(myMember.finished_at) || busy || visible.length !== expected || !activeScore?.strokes || activeScore.strokes <= 1} onClick={() => void save(activeHole.hole_number, String((activeScore?.strokes || 1) - 1))}>−</button>
-              <div><div className="mobile-number">{activeScore?.picked_up ? 'X' : activeScore?.strokes ?? '–'}</div><div className="mobile-sub" style={{ textAlign: 'center' }}>ran</div></div>
+              <div><div className="mobile-number">{activeScore?.picked_up ? 'X' : activeScore?.strokes ?? '–'}</div><div className="mobile-sub" style={{ textAlign: 'center' }}>RÁNY</div></div>
               <button type="button" aria-label="Přidat ránu" disabled={!myMember || Boolean(myMember.finished_at) || busy || visible.length !== expected || (activeScore?.strokes ?? 0) >= 30} onClick={() => void save(activeHole.hole_number, String(activeScore?.strokes ? activeScore.strokes + 1 : 1))}>+</button>
             </div>
-            {game.scoring === 'stableford' && <div className="mobile-pill"><strong style={{ fontSize: 21 }}>{myMember ? points(myMember, activeHole) ?? '–' : '–'}</strong><div className="mobile-sub">Stableford bodů za jamku</div></div>}
+            {game.scoring === 'stableford' && <div className="mobile-pill"><strong style={{ fontSize: 25 }}>{myMember ? points(myMember, activeHole) ?? '–' : '–'} {myMember && points(myMember, activeHole) === 1 ? 'bod' : 'body'}</strong><div className="mobile-sub">Stableford za jamku</div></div>}
             <div className="mobile-minor-actions">
               <button type="button" disabled={!myMember || Boolean(myMember.finished_at) || busy || visible.length !== expected} onClick={() => void save(activeHole.hole_number, 'X')}>Zvednutý míč (X)</button>
               <button type="button" disabled={!myMember || Boolean(myMember.finished_at) || busy || visible.length !== expected || !activeScore} onClick={() => void save(activeHole.hole_number, '')}>Smazat skóre</button>
             </div>
             <div className="mobile-nav" style={{ marginTop: 8 }}>
               <button type="button" disabled={activeHole.hole_number <= 1} onClick={() => setMobileHole(Math.max(1, activeHole.hole_number - 1))}>← Předchozí</button>
-              <button type="button" disabled={activeHole.hole_number >= expected} onClick={() => setMobileHole(Math.min(expected, activeHole.hole_number + 1))}>Další →</button>
+              <button type="button" className="mobile-nav-next" disabled={activeHole.hole_number >= expected} onClick={() => setMobileHole(Math.min(expected, activeHole.hole_number + 1))}>Další →</button>
             </div>
           </>}
         </div>
