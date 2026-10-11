@@ -111,7 +111,7 @@ export default function AdminPlayersPage() {
 
   function openArchive(player: Profile) {
     const id = textValue(player.id);
-    if (!id || player.is_admin === true || player.is_archived === true) return;
+    if (!id || player.is_admin === true) return;
     setEditingId(null);
     setForm(null);
     setArchivingId(id);
@@ -138,8 +138,9 @@ export default function AdminPlayersPage() {
       const archivedId = archivingId;
       const name = playerName(players.find(p => textValue(p.id) === archivedId) || {});
       const { data: refreshed, error: refreshError } = await db.from('profiles').select('*').eq('id', archivedId).single();
-      if (refreshError) throw refreshError;
-      setPlayers(current => current.map(player => textValue(player.id) === archivedId ? refreshed as Profile : player));
+      setPlayers(current => current.map(player => textValue(player.id) === archivedId
+        ? (refreshError || !refreshed ? { ...player, is_archived: true } : refreshed as Profile)
+        : player));
       setArchivingId(null);
       setArchiveConfirm('');
       setNotice(`Přihlašovací účet hráče ${name} byl zrušen. Golfová historie zůstala zachována.`);
@@ -258,7 +259,7 @@ export default function AdminPlayersPage() {
                       <button type="button" className="edit-button" disabled={saving || archiveBusy || !id || player.is_archived === true} onClick={() => isEditing ? closeEdit() : openEdit(player)}>
                         {isEditing ? 'Zavřít' : 'Upravit'}
                       </button>
-                      {player.is_admin !== true && player.is_archived !== true && <button type="button" className="archive-button" disabled={saving || archiveBusy || !id} onClick={() => openArchive(player)}>Zrušit účet</button>}
+                      {player.is_admin !== true && <button type="button" className="archive-button" disabled={saving || archiveBusy || !id} onClick={() => openArchive(player)}>{player.is_archived === true ? 'Ověřit / dokončit' : 'Zrušit účet'}</button>}
                     </div>
                     {archivingId === id && (
                       <div className="archive-panel">
@@ -270,7 +271,7 @@ export default function AdminPlayersPage() {
                         {archiveError && <p role="alert" style={{color:'#a12d27',fontSize:13}}>{archiveError}</p>}
                         <div className="edit-actions">
                           <button type="button" className="edit-button" disabled={archiveBusy} onClick={() => { setArchivingId(null); setArchiveConfirm(''); setArchiveError(''); }}>Zpět</button>
-                          <button type="button" className="archive-button" disabled={archiveBusy || archiveConfirm !== 'ZRUŠIT'} onClick={() => void archivePlayer()}>{archiveBusy ? 'Ruším účet…' : 'Potvrdit zrušení účtu'}</button>
+                          <button type="button" className="archive-button" disabled={archiveBusy || archiveConfirm !== 'ZRUŠIT'} onClick={() => void archivePlayer()}>{archiveBusy ? 'Ověřuji účet…' : player.is_archived === true ? 'Potvrdit dokončení' : 'Potvrdit zrušení účtu'}</button>
                         </div>
                       </div>
                     )}
