@@ -33,9 +33,7 @@ export default function NewGame() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [search, setSearch] = useState('');
-  const [matches, setMatches] = useState<Player[]>([]);
   const [selected, setSelected] = useState<Player[]>([]);
-  const [searchBusy, setSearchBusy] = useState(false);
   const [searchError, setSearchError] = useState('');
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
   const [playersBusy, setPlayersBusy] = useState(false);
@@ -93,31 +91,14 @@ export default function NewGame() {
     return () => { active = false; };
   }, []);
 
-  async function findPlayers() {
-    setSearchError('');
-    setMatches([]);
-    const query = search.trim();
-    if (query.length < 2) {
-      setSearchError('Zadej alespoň 2 znaky přezdívky.');
-      return;
-    }
-    setSearchBusy(true);
-    try {
-      const { data: { user }, error: authError } = await supabase().auth.getUser();
-      if (authError || !user) throw new Error('Nejprve se přihlas.');
-      const escaped = query.replace(/[\%_]/g, '\\$&');
-      const { data, error } = await supabase().from('profiles')
-        .select('id,nickname,handicap_index')
-        .ilike('nickname', '%' + escaped + '%')
-        .order('nickname').limit(15);
-      if (error) throw error;
-      setMatches((data || []).filter(p => p.id !== user.id && !selected.some(s => s.id === p.id)));
-    } catch (e) {
-      setSearchError(e instanceof Error ? e.message : 'Vyhledávání se nezdařilo.');
-    } finally {
-      setSearchBusy(false);
-    }
-  }
+  // Seznam je načtený při otevření stránky; výsledky se mění ihned při psaní.
+  const normalizedSearch = search.trim().toLocaleLowerCase('cs');
+  const matchingPlayers = normalizedSearch.length > 0
+    ? allPlayers.filter(player =>
+        !selected.some(s => s.id === player.id) &&
+        player.nickname.toLocaleLowerCase('cs').includes(normalizedSearch)
+      ).sort((a, b) => a.nickname.localeCompare(b.nickname, 'cs', { sensitivity: 'base' })).slice(0, 15)
+    : [];
 
   function addPlayer(player: Player) {
     if (selected.length >= 3) return;
@@ -126,7 +107,7 @@ export default function NewGame() {
       return;
     }
     setSelected(prev => prev.some(p => p.id === player.id) ? prev : [...prev, player]);
-    setMatches(prev => prev.filter(p => p.id !== player.id));
+    setSearch('');
     setShowPlayerList(false);
     setSearchError('');
   }
@@ -204,7 +185,13 @@ export default function NewGame() {
             <input required maxLength={100} value={name} onChange={e => setName(e.target.value)} />
           </label>
           <label className="field">Datum
-            <input type="date" required value={date} onChange={e => setDate(e.target.value)} />
+            <input
+              className="new-game-date"
+              type="date"
+              required
+              value={date}
+              onChange={e => setDate(e.target.value)}
+            />
           </label>
           <label className="field">Golfové hřiště
             <select required value={course} onChange={e => setCourse(e.target.value)}>
@@ -273,31 +260,31 @@ export default function NewGame() {
               <input
                 type="search"
                 value={search}
-                onChange={e => { setSearch(e.target.value); setMatches([]); setSearchError(''); }}
+                onChange={e => { setSearch(e.target.value); setSearchError(''); }}
                 placeholder="Např. Petr"
-                minLength={2}
                 disabled={busy || selected.length >= 3}
               />
             </label>
-            <button
-              type="button"
-              className="btn secondary"
-              onClick={findPlayers}
-              disabled={busy || searchBusy || selected.length >= 3 || search.trim().length < 2}
-              style={{ marginTop: 8 }}
-            >
-              {searchBusy ? 'Hledám…' : 'Najít spoluhráče'}
-            </button>
             {searchError && <p className="error" role="alert">{searchError}</p>}
-            {matches.length > 0 && (
-              <div style={{ marginTop: 12 }}>
-                <p className="muted">Nalezení hráči:</p>
-                {matches.map(player => (
-                  <div key={player.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 8 }}>
-                    <span>{player.nickname} · HCP {player.handicap_index ?? 'neuveden'}</span>
-                    <button type="button" onClick={() => addPlayer(player)} disabled={busy || selected.length >= 3}>Přidat</button>
-                  </div>
-                ))}
+            {normalizedSearch.length > 0 && (
+              <div style={{ marginTop: 10 }} aria-live="polite">
+                {playersBusy ? <p className="muted">Načítám hráče…</p> :
+                  matchingPlayers.length > 0 ? (
+                    <div style={{ border: '1px solid #c8d8ce', borderRadius: 12, padding: 8 }}>
+                      {matchingPlayers.map(player => (
+                        <button
+                          key={player.id}
+                          type="button"
+                          disabled={busy || selected.length >= 3}
+                          onClick={() => addPlayer(player)}
+                          style={{ display: 'flex', width: '100%', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '11px 8px', marginBottom: 4, background: '#f1f6f2', border: '1px solid #dbe8de', borderRadius: 8, color: '#123d2b', textAlign: 'left', cursor: 'pointer' }}
+                        >
+                          <span style={{ overflowWrap: 'anywhere' }}>{player.nickname}</span>
+                          <span style={{ flexShrink: 0, fontSize: 12 }}>HCP {player.handicap_index ?? '–'}　＋</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : !playersError ? <p className="muted">Žádný odpovídající hráč.</p> : null}
               </div>
             )}
             {selected.length > 0 && (
@@ -317,6 +304,27 @@ export default function NewGame() {
           <button className="btn secondary" disabled={busy}>{busy ? 'Ukládám…' : 'Vytvořit hru'}</button>
         </form>
         <Link href="/games">← Zpět na moje hry</Link>
+        <style>{`
+          /* iOS Safari: datum nesmí mít vlastní minimální šířku ani přetékat z formuláře. */
+          .field { min-width: 0; }
+          .field input.new-game-date {
+            display: block;
+            width: 100%;
+            min-width: 0;
+            max-width: 100%;
+            box-sizing: border-box;
+            font-size: 16px;
+            line-height: normal;
+            -webkit-appearance: none;
+            appearance: none;
+            text-align: left;
+          }
+          .field input.new-game-date::-webkit-date-and-time-value {
+            min-width: 0;
+            text-align: left;
+          }
+          .field input.new-game-date::-webkit-datetime-edit { min-width: 0; }
+        `}</style>
       </div>
     </main>
   );
