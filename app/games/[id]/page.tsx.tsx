@@ -184,16 +184,16 @@ export default function GameDetail() {
     finally { savingRef.current = false; setBusy(false); }
   }
 
-  return <main style={{ width: 'min(1280px, calc(100% - 24px))', maxWidth: '1280px', margin: '0 auto', boxSizing: 'border-box' }}>
+  return <main style={{ width: 'calc(100% - 32px)', maxWidth: 1320, margin: '0 auto', boxSizing: 'border-box' }}>
     <p className="brand">LONY GOLF SCORECARD</p>
     {!game ? <p>{error || 'Načítám hru…'}</p> : <>
       <h1>{game.name}</h1>
       <p>{game.play_date} · {expected} jamek · {game.scoring === 'stableford' ? 'Stableford' : 'Na rány'}</p>
       <div className="panel" style={{ maxWidth: 'none', width: '100%', boxSizing: 'border-box' }}>
         <h2>Společná hra – flight</h2>
-        <p className="muted">Každý hráč zapisuje pouze své vlastní výsledky ve společné tabulce níže.</p>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
-          {members.map(member => <div key={member.id} style={{ padding: '10px 14px', borderRadius: 10, background: member.player_id === userId ? '#123f2d' : '#4f7163', color: '#fff' }}>
+        <p className="muted">Všichni hráči jsou ve společné scorekartě níže. Každý zapisuje pouze své vlastní rány.</p>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {members.map(member => <div key={member.id} style={{ padding: '10px 14px', borderRadius: 8, background: member.player_id === userId ? '#123e2c' : '#4d7162', color: 'white' }}>
             <strong>{member.nickname}{member.player_id === userId ? ' (já)' : ''}</strong> · HCP {member.handicap_snapshot ?? '–'}
             {playingHandicap(member) !== null ? ` · Herní HCP ${playingHandicap(member)}` : ''}
             {member.finished_at ? ' · Dokončeno' : ''}
@@ -207,7 +207,7 @@ export default function GameDetail() {
         <p className="muted">Všichni hráči na jedné scorekartě. Své rány můžeš zapisovat přímo zde; ostatní hráče můžeš pouze sledovat. Na mobilu posuň tabulku do strany.</p>
         {visible.length !== expected && <p className="error">Hřiště nemá všech {expected} jamek. Zápis není dostupný.</p>}
         <div className="score-scroll" style={{ overflowX: 'auto', maxWidth: '100%' }}>
-          <table className="score-table" style={{ minWidth: 300 + members.length * (game.scoring === 'stableford' ? 170 : 95), width: '100%' }}>
+          <table className="score-table" style={{ width: '100%', minWidth: 230 + members.length * (game.scoring === 'stableford' ? 180 : 110), tableLayout: 'auto' }}>
             <thead>
               <tr>
                 <th rowSpan={2}>Jamka</th><th rowSpan={2}>PAR</th><th rowSpan={2}>SI</th>
@@ -251,10 +251,10 @@ export default function GameDetail() {
         {game.scoring === 'stableford' && expected !== 18 && <p className="muted">Stableford body jsou v této verzi dostupné pouze pro 18 jamek.</p>}
       </div>
       {myMember && <div className="panel" style={{ maxWidth: 'none', width: '100%', boxSizing: 'border-box' }}>
-        <h2>Dokončení mé hry</h2>
+        <h2>Dokončení hry</h2>
         {myMember.finished_at ? <p className="success">Hru jsi dokončil.</p> :
           <button className="btn secondary" disabled={busy || !complete(myMember)} onClick={finish}>Potvrdit dokončení hry</button>}
-        {!myMember.finished_at && !complete(myMember) && <p className="muted">Dokončení bude dostupné po vyplnění všech jamek.</p>}
+        {!myMember.finished_at && !complete(myMember) && <p className="muted">Hru lze dokončit po zapsání všech jamek.</p>}
       </div>}
       <div className="panel" style={{ maxWidth: 'none', width: '100%', boxSizing: 'border-box' }}>
         <h2>Průběžné výsledky</h2>
