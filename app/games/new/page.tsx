@@ -12,6 +12,7 @@ type Tee = {
   name: string;
   course_rating: number | null;
   slope_rating: number | null;
+  par_total: number | null;
 };
 
 function parseHandicap(value: unknown): number | null {
@@ -28,6 +29,7 @@ export default function NewGame() {
   const [tee, setTee] = useState('');
   const [courses, setCourses] = useState<Course[]>([]);
   const [tees, setTees] = useState<Tee[]>([]);
+  const selectedTee = tees.find(t => t.id === tee);
   const [count, setCount] = useState(18);
   const [scoring, setScoring] = useState('stableford');
   const [error, setError] = useState('');
@@ -56,8 +58,9 @@ export default function NewGame() {
     setTees([]);
     if (!course) return;
     supabase().from('course_tees')
-      .select('id,name,course_rating,slope_rating')
+      .select('id,name,course_rating,slope_rating,par_total')
       .eq('course_id', course)
+      .order('name')
       .then(({ data, error }) => {
         if (error) setError(error.message);
         else setTees(data || []);
@@ -264,9 +267,25 @@ export default function NewGame() {
           <label className="field">Odpaliště
             <select required value={tee} onChange={e => setTee(e.target.value)}>
               <option value="">Vyber odpaliště</option>
-              {tees.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+              {tees.map(t => <option key={t.id} value={t.id}>{t.name}{t.course_rating !== null && t.slope_rating !== null ? ` · CR ${t.course_rating} · SR ${t.slope_rating}` : ''}</option>)}
             </select>
           </label>
+          {selectedTee && (
+            <div role="status" style={{ padding: '12px 14px', marginBottom: 14, borderRadius: 12, background: '#edf4ee', color: '#123d2b', fontSize: 14 }}>
+              <strong>Vybrané odpaliště: {selectedTee.name}</strong>
+              <div style={{ marginTop: 5 }}>
+                CR: {selectedTee.course_rating ?? 'neuvedeno'} · SR: {selectedTee.slope_rating ?? 'neuvedeno'} · PAR: {selectedTee.par_total ?? 'neuvedeno'}
+              </div>
+              <div style={{ marginTop: 6, fontSize: 12 }}>
+                Prozatím platí vybrané odpaliště pro všechny hráče této hry. Individuální odpaliště připravíme v dalším kroku.
+              </div>
+              {courses.find(c => c.id === course)?.name === 'Golf Resort Karlovy Vary' && (
+                <div style={{ marginTop: 6, fontSize: 12 }}>
+                  Pozor: normování odpališť Karlových Varů dosud není potvrzené aktuálními údaji ČGF.
+                </div>
+              )}
+            </div>
+          )}
           <label className="field">Počet jamek
             <select value={count} onChange={e => setCount(Number(e.target.value))}>
               <option value={18}>18 jamek</option>
@@ -309,7 +328,7 @@ export default function NewGame() {
                         style={{ display: 'flex', width: '100%', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '11px 8px', marginBottom: 4, background: '#f1f6f2', border: '1px solid #dbe8de', borderRadius: 8, color: '#123d2b', textAlign: 'left', cursor: 'pointer' }}
                       >
                         <span style={{ overflowWrap: 'anywhere' }}>{player.nickname}</span>
-                        <span style={{ flexShrink: 0, fontSize: 12 }}>HCP {player.handicap_index ?? '–'}　＋</span>
+                        <span style={{ flexShrink: 0, fontSize: 12 }}>{activePlayerIds.includes(player.id) ? 'Aktivní hra' : `HCP ${player.handicap_index ?? '–'}　＋`}</span>
                       </button>
                     ))}
                 {!playersBusy && allPlayers.filter(p => !selected.some(s => s.id === p.id)).length === 0 && !playersError &&
