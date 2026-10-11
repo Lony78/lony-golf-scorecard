@@ -53,6 +53,10 @@ export default function AdminPlayersPage() {
   const [saving, setSaving] = useState(false);
   const [editError, setEditError] = useState('');
   const [notice, setNotice] = useState('');
+  const [archivingId, setArchivingId] = useState<string | null>(null);
+  const [archiveError, setArchiveError] = useState('');
+  const [archiveConfirm, setArchiveConfirm] = useState('');
+  const [archiveBusy, setArchiveBusy] = useState(false);
 
   useEffect(() => {
     let live = true;
@@ -103,6 +107,47 @@ export default function AdminPlayersPage() {
     setEditingId(null);
     setForm(null);
     setEditError('');
+  }
+
+  function openArchive(player: Profile) {
+    const id = textValue(player.id);
+    if (!id || player.is_admin === true || player.is_archived === true) return;
+    setEditingId(null);
+    setForm(null);
+    setArchivingId(id);
+    setArchiveConfirm('');
+    setArchiveError('');
+    setNotice('');
+  }
+
+  async function archivePlayer() {
+    if (!archivingId || archiveBusy || archiveConfirm !== 'ZRUŠIT') return;
+    setArchiveBusy(true);
+    setArchiveError('');
+    try {
+      const db = supabase();
+      const { data: { session }, error: sessionError } = await db.auth.getSession();
+      if (sessionError || !session?.access_token) throw new Error('Přihlášení vypršelo. Přihlas se znovu.');
+      const response = await fetch('/api/admin/archive-player', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ playerId: archivingId }),
+      });
+      const result: { success?: boolean; error?: string } = await response.json();
+      if (!response.ok || result.success !== true) throw new Error(result.error || 'Účet se nepodařilo zrušit.');
+      const archivedId = archivingId;
+      const name = playerName(players.find(p => textValue(p.id) === archivedId) || {});
+      const { data: refreshed, error: refreshError } = await db.from('profiles').select('*').eq('id', archivedId).single();
+      if (refreshError) throw refreshError;
+      setPlayers(current => current.map(player => textValue(player.id) === archivedId ? refreshed as Profile : player));
+      setArchivingId(null);
+      setArchiveConfirm('');
+      setNotice(`Přihlašovací účet hráče ${name} byl zrušen. Golfová historie zůstala zachována.`);
+    } catch (error) {
+      setArchiveError(error instanceof Error ? error.message : 'Operace se nezdařila.');
+    } finally {
+      setArchiveBusy(false);
+    }
   }
 
   async function saveProfile(event: FormEvent<HTMLFormElement>) {
@@ -170,6 +215,8 @@ export default function AdminPlayersPage() {
         .lony-players .edit-field { display:flex; flex-direction:column; gap:6px; font-size:13px; font-weight:600; }
         .lony-players .edit-actions { display:flex; gap:10px; justify-content:flex-end; margin-top:18px; }
         .lony-players .save-button { background:#195c37; color:white; border:0; border-radius:10px; padding:11px 16px; font:inherit; font-weight:700; cursor:pointer; }
+        .lony-players .archive-button { border:1px solid #d8a9a5; border-radius:10px; padding:9px 12px; background:#fff1ef; color:#9c2f29; font:inherit; font-size:13px; font-weight:700; cursor:pointer; }
+        .lony-players .archive-panel { margin:0 0 14px; padding:17px; border:1px solid #e2aaa4; border-radius:15px; background:#fff6f4; }
         .lony-players button:disabled { opacity:.55; cursor:not-allowed; }
         @media(max-width:520px) { .lony-players .edit-grid { grid-template-columns:1fr; } .lony-players .players-row { gap:8px; } }
       `}</style>
@@ -181,7 +228,7 @@ export default function AdminPlayersPage() {
       {status === 'error' && <p role="alert">Načtení se nezdařilo: {message}</p>}
       {status === 'allowed' && (
         <>
-          <p style={{ color:'#d0e6d4' }}>Registrovaní hráči · Správa profilů</p>
+          <p style={{ color:'#d0e6d4' }}>Registrovaní hráči · Správa profilů a účtů</p>
           <section className="players-panel">
             <h2 style={{ margin:'0 0 5px', fontSize:21 }}>Registrovaní hráči</h2>
             <p style={{ margin:'0 0 18px', fontSize:13, color:'#6a7f70' }}>Načteno {players.length} profilů</p>
@@ -207,10 +254,26 @@ export default function AdminPlayersPage() {
                         <small>HCP {handicap(player)}</small>
                       </div>
                       {player.is_admin === true && <span className="players-badge">ADMIN</span>}
-                      <button type="button" className="edit-button" disabled={saving || !id} onClick={() => isEditing ? closeEdit() : openEdit(player)}>
+                       {player.is_archived === true && <span className="players-badge" style={{background:'#ece7df',color:'#786451'}}>ARCHIV</span>}
+                      <button type="button" className="edit-button" disabled={saving || archiveBusy || !id || player.is_archived === true} onClick={() => isEditing ? closeEdit() : openEdit(player)}>
                         {isEditing ? 'Zavřít' : 'Upravit'}
                       </button>
+                      {player.is_admin !== true && player.is_archived !== true && <button type="button" className="archive-button" disabled={saving || archiveBusy || !id} onClick={() => openArchive(player)}>Zrušit účet</button>}
                     </div>
+                    {archivingId === id && (
+                      <div className="archive-panel">
+                        <h3 style={{margin:'0 0 10px',color:'#902c26'}}>Zrušit účet: {name}?</h3>
+                        <p style={{fontSize:13,lineHeight:1.6}}>Přihlašovací účet bude odstraněn. Profil, odehrané hry a výsledky zůstanou archivované. Akci nelze jednoduše vrátit.</p>
+                        <label className="edit-field">Pro potvrzení napiš přesně ZRUŠIT
+                          <input className="edit-input" autoComplete="off" value={archiveConfirm} onChange={e => setArchiveConfirm(e.target.value)} />
+                        </label>
+                        {archiveError && <p role="alert" style={{color:'#a12d27',fontSize:13}}>{archiveError}</p>}
+                        <div className="edit-actions">
+                          <button type="button" className="edit-button" disabled={archiveBusy} onClick={() => { setArchivingId(null); setArchiveConfirm(''); setArchiveError(''); }}>Zpět</button>
+                          <button type="button" className="archive-button" disabled={archiveBusy || archiveConfirm !== 'ZRUŠIT'} onClick={() => void archivePlayer()}>{archiveBusy ? 'Ruším účet…' : 'Potvrdit zrušení účtu'}</button>
+                        </div>
+                      </div>
+                    )}
                     {isEditing && (
                       <form className="edit-panel" onSubmit={saveProfile}>
                         <h3 style={{ margin:'0 0 15px' }}>Úprava profilu: {name}</h3>
