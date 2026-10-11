@@ -41,6 +41,8 @@ export default function NewGame() {
   const [showPlayerList, setShowPlayerList] = useState(false);
   const [activePlayerIds, setActivePlayerIds] = useState<string[]>([]);
   const [checkingActive, setCheckingActive] = useState(true);
+  const [activeGameId, setActiveGameId] = useState<string | null>(null);
+  const [activeCheckError, setActiveCheckError] = useState('');
 
   useEffect(() => {
     supabase().from('courses').select('id,name').order('name').then(({ data, error }) => {
@@ -100,18 +102,23 @@ export default function NewGame() {
         const client = supabase();
         const { data: { user }, error: authError } = await client.auth.getUser();
         if (authError) throw authError;
-        if (!user) return;
+        if (!user) { router.replace('/login'); return; }
+        // Vlastní účast zjišťujeme samostatně; ostatní hráče může omezovat RLS.
+        const { data: own, error: ownError } = await client.from('game_players')
+          .select('game_id').eq('player_id', user.id).is('finished_at', null).limit(1);
+        if (ownError) throw ownError;
+        if (mounted) setActiveGameId(own?.[0]?.game_id ?? null);
         const { data, error } = await client.from('game_players')
           .select('player_id').is('finished_at', null);
         if (error) throw error;
         if (mounted) setActivePlayerIds((data || []).map(p => p.player_id));
       } catch (e) {
-        if (mounted) setError(e instanceof Error ? e.message : 'Nepodařilo se ověřit aktivní hry.');
+        if (mounted) setActiveCheckError('Aktivní hry se nepodařilo ověřit. Obnov stránku a zkus to znovu.');
       } finally { if (mounted) setCheckingActive(false); }
     }
     void checkActive();
     return () => { mounted = false; };
-  }, []);
+  }, [router]);
 
   // Seznam je načtený při otevření stránky; výsledky se mění ihned při psaní.
   const normalizedSearch = search.trim().toLocaleLowerCase('cs');
@@ -140,7 +147,8 @@ export default function NewGame() {
 
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (checkingActive) { setError('Počkej na ověření aktivních her.'); return; }
+    if (checkingActive || activeCheckError) { setError('Nepodařilo se ověřit aktivní hru. Obnov stránku.'); return; }
+    if (activeGameId) { setError('Již máš aktivní hru. Nejdříve ji dokonči nebo opusť.'); return; }
     if (!course || !tee) {
       setError('Vyber hřiště a odpaliště.');
       return;
@@ -150,6 +158,10 @@ export default function NewGame() {
     try {
       const { data: { user }, error: authError } = await supabase().auth.getUser();
       if (authError || !user) throw new Error('Nejprve se přihlas.');
+      const { data: existing, error: existingError } = await supabase().from('game_players')
+        .select('game_id').eq('player_id', user.id).is('finished_at', null).limit(1);
+      if (existingError) throw existingError;
+      if (existing?.length) { setActiveGameId(existing[0].game_id); throw new Error('Již máš aktivní hru. Nejdříve ji dokonči nebo opusť.'); }
 
        // Databázový profil je primární zdroj HCP.
        const { data: profile, error: profileError } = await supabase()
@@ -192,6 +204,9 @@ export default function NewGame() {
        if (memberError) {
          // Pokus o odstranění neúplné hry; pokud RLS smazání nepovolí, chybu zobrazíme.
          const { error: cleanupError } = await supabase().from('games').delete().eq('id', game.id);
+         if (memberError.code === '23505' || memberError.message.includes('one_active_game_per_player')) {
+           throw new Error('Ty nebo některý vybraný spoluhráč už máte aktivní hru. Nejdříve ji dokončete nebo opusťte.' + (cleanupError ? ' Nepodařilo se uklidit neúplný záznam hry.' : ''));
+         }
          throw new Error(memberError.message + (cleanupError ? ' Hru se nepodařilo automaticky odstranit: ' + cleanupError.message : ''));
        }
       router.push('/games/' + game.id);
@@ -207,7 +222,15 @@ export default function NewGame() {
       <p className="brand">LONY GOLF SCORECARD</p>
       <div className="panel">
         <h1>Nová hra</h1>
-        <form onSubmit={submit}>
+        {checkingActive ? <p className="muted">Ověřuji aktivní hru…</p> : activeCheckError ? (
+          <div role="alert"><p className="error">{activeCheckError}</p><button type="button" className="btn secondary" onClick={() => window.location.reload()}>Zkusit znovu</button></div>
+        ) : activeGameId ? (
+          <div role="status" style={{ padding: 16, borderRadius: 12, background: '#edf4ee', color: '#123d2b' }}>
+            <h2 style={{ marginTop: 0 }}>Již máš aktivní hru</h2>
+            <p>Nejdříve ji dokonči nebo opusť, potom můžeš vytvořit novou.</p>
+            <Link className="btn secondary" href={'/games/' + activeGameId}>Přejít na aktivní hru →</Link>
+          </div>
+        ) : <form onSubmit={submit}>
           <label className="field">Název hry
             <input required maxLength={100} value={name} onChange={e => setName(e.target.value)} />
           </label>
@@ -329,7 +352,7 @@ export default function NewGame() {
           {courses.length === 0 && <p className="muted">Seznam hřišť je prázdný. Hřiště musí být nejprve vložena s ověřenými parametry.</p>}
           {error && <p className="error" role="alert">{error}</p>}
           <button className="btn secondary" disabled={busy}>{busy ? 'Ukládám…' : 'Vytvořit hru'}</button>
-        </form>
+        </form>}
         <Link href="/games">← Zpět na moje hry</Link>
         <style>{`
           /* Výběrové nabídky na PC: světlý systémový seznam i při tmavém motivu webu. */
