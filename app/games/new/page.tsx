@@ -130,7 +130,7 @@ export default function NewGame() {
     : [];
 
   function addPlayer(player: Player) {
-    if (selected.length >= 3) return;
+    if (selected.length >= 3 || checkingActive || activeCheckError) return;
     if (activePlayerIds.includes(player.id)) {
       setSearchError('Tento hráč už má aktivní hru a nelze ho přidat do dalšího flightu.');
       return;
@@ -162,6 +162,18 @@ export default function NewGame() {
         .select('game_id').eq('player_id', user.id).is('finished_at', null).limit(1);
       if (existingError) throw existingError;
       if (existing?.length) { setActiveGameId(existing[0].game_id); throw new Error('Již máš aktivní hru. Nejdříve ji dokonči nebo opusť.'); }
+      // Znovu ověřit obsazenost těsně před vytvořením hry.
+      // Databázový unikátní index chrání i před souběžným přidáním.
+      const { data: currentMembers, error: membersCheckError } = await supabase()
+        .from('game_players').select('player_id').is('finished_at', null);
+      if (membersCheckError) throw new Error('Nepodařilo se ověřit dostupnost spoluhráčů. Zkus to znovu.');
+      const busyIds = new Set((currentMembers || []).map(member => member.player_id));
+      setActivePlayerIds(Array.from(busyIds));
+      const busySelected = selected.filter(player => busyIds.has(player.id));
+      if (busySelected.length) {
+        throw new Error('Aktivní hru už má: ' + busySelected.map(player => player.nickname).join(', ') + '. Odeber obsazené hráče z flightu.');
+      }
+
 
        // Databázový profil je primární zdroj HCP.
        const { data: profile, error: profileError } = await supabase()
@@ -305,6 +317,8 @@ export default function NewGame() {
               </div>
             )}
             {playersError && <p className="error" role="alert">{playersError}</p>}
+            {activeCheckError && <p className="error" role="alert">{activeCheckError}</p>}
+            {!checkingActive && !activeCheckError && <p className="muted" style={{fontSize: 13}}>Hráče označené „Aktivní hra“ nelze přidat do dalšího flightu.</p>}
             <p className="muted">Nebo použij vyhledávání:</p>
             <label className="field">Vyhledat podle přezdívky
               <input
@@ -312,7 +326,7 @@ export default function NewGame() {
                 value={search}
                 onChange={e => { setSearch(e.target.value); setSearchError(''); }}
                 placeholder="Např. Petr"
-                disabled={busy || selected.length >= 3}
+                disabled={busy || selected.length >= 3 || checkingActive || Boolean(activeCheckError)}
               />
             </label>
             {searchError && <p className="error" role="alert">{searchError}</p>}
@@ -325,7 +339,7 @@ export default function NewGame() {
                         <button
                           key={player.id}
                           type="button"
-                          disabled={busy || selected.length >= 3 || activePlayerIds.includes(player.id)}
+                          disabled={busy || selected.length >= 3 || checkingActive || Boolean(activeCheckError) || activePlayerIds.includes(player.id)}
                           onClick={() => addPlayer(player)}
                           style={{ display: 'flex', width: '100%', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '11px 8px', marginBottom: 4, background: '#f1f6f2', border: '1px solid #dbe8de', borderRadius: 8, color: '#123d2b', textAlign: 'left', cursor: 'pointer' }}
                         >
@@ -351,7 +365,7 @@ export default function NewGame() {
           </section>
           {courses.length === 0 && <p className="muted">Seznam hřišť je prázdný. Hřiště musí být nejprve vložena s ověřenými parametry.</p>}
           {error && <p className="error" role="alert">{error}</p>}
-          <button className="btn secondary" disabled={busy}>{busy ? 'Ukládám…' : 'Vytvořit hru'}</button>
+          <button className="btn secondary" disabled={busy || checkingActive || Boolean(activeCheckError)}>{busy ? 'Ukládám…' : 'Vytvořit hru'}</button>
         </form>}
         <div style={{ marginTop: 22, marginBottom: 12 }}>
       <Link href="/games" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 9, minHeight: 44, padding: '10px 18px', borderRadius: 999, backgroundColor: '#e7f1ea', color: '#164b35', fontSize: 14, fontWeight: 650, textDecoration: 'none', lineHeight: 1.2, border: '1px solid #d5e6da', boxSizing: 'border-box' }}>
