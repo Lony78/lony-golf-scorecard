@@ -2,6 +2,7 @@
 
 import type { TouchEvent } from 'react';
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabase';
@@ -160,10 +161,26 @@ export default function GameDetail() {
   const activeScore = selectedMember && activeHole ? scores[selectedMember.id]?.[activeHole.hole_number] : undefined;
   const completedCount = selectedMember ? visible.filter(h => Boolean(scores[selectedMember.id]?.[h.hole_number])).length : 0;
   const ownCompletedCount = myMember ? visible.filter(h => Boolean(scores[myMember.id]?.[h.hole_number])).length : 0;
+  // View Transitions zachyti starou i novou kartu, takze se pri prepnuti
+  // pohybuji soucasne proti sobe. Bez podpory API funguje bezne prepnuti.
+  function selectPlayer(nextId: string, direction?: number) {
+    if (busy || !selectedMember || nextId === selectedMember.id) return;
+    const currentIndex = members.findIndex(member => member.id === selectedMember.id);
+    const nextIndex = members.findIndex(member => member.id === nextId);
+    if (nextIndex < 0) return;
+    const movement = direction ?? (nextIndex > currentIndex ? 1 : -1);
+    document.documentElement.dataset.playerSwipeDirection = movement > 0 ? 'next' : 'prev';
+    if (typeof document.startViewTransition === 'function' &&
+        !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      document.startViewTransition(() => { flushSync(() => setSelectedPlayerId(nextId)); });
+    } else {
+      setSelectedPlayerId(nextId);
+    }
+  }
   function switchPlayer(direction: number) {
     if (busy || members.length < 2 || !selectedMember) return;
     const index = members.findIndex(member => member.id === selectedMember.id);
-    setSelectedPlayerId(members[(index + direction + members.length) % members.length].id);
+    selectPlayer(members[(index + direction + members.length) % members.length].id, direction);
   }
   function onScoreTouchStart(e: TouchEvent<HTMLElement>) {
     if (e.touches.length !== 1) { swipeStart.current = null; return; }
@@ -500,7 +517,7 @@ export default function GameDetail() {
         {mobileView === 'hole' ? <>
         <div className="mobile-card swipe-player-area" onTouchStartCapture={onScoreTouchStart} onTouchEndCapture={onScoreTouchEnd} onTouchCancel={() => { swipeStart.current = null; }} style={{ background: selectedColors.light, border: `2px solid ${selectedColors.border}`, transition: 'background-color 180ms ease, border-color 180ms ease' }}>
           <div className="flight-player-strip" role="group" aria-label="Vybrat hráče pro zápis skóre">
-            {members.map((member, index) => <button key={member.id} type="button" className={`${selectedMember?.id === member.id ? 'selected' : ''} ${member.finished_at ? 'finished' : ''}`} style={{ background: selectedMember?.id === member.id ? playerColors[index % playerColors.length].strong : playerColors[index % playerColors.length].light, color: playerColors[index % playerColors.length].text, borderColor: selectedMember?.id === member.id ? playerColors[index % playerColors.length].text : playerColors[index % playerColors.length].border }} disabled={busy} aria-pressed={selectedMember?.id === member.id} onClick={() => setSelectedPlayerId(member.id)} title={member.finished_at ? 'Hráč dokončil hru – skóre nelze měnit' : member.nickname}>
+            {members.map((member, index) => <button key={member.id} type="button" className={`${selectedMember?.id === member.id ? 'selected' : ''} ${member.finished_at ? 'finished' : ''}`} style={{ background: selectedMember?.id === member.id ? playerColors[index % playerColors.length].strong : playerColors[index % playerColors.length].light, color: playerColors[index % playerColors.length].text, borderColor: selectedMember?.id === member.id ? playerColors[index % playerColors.length].text : playerColors[index % playerColors.length].border }} disabled={busy} aria-pressed={selectedMember?.id === member.id} onClick={() => selectPlayer(member.id)} title={member.finished_at ? 'Hráč dokončil hru – skóre nelze měnit' : member.nickname}>
               {member.nickname}{member.player_id === userId ? ' (já)' : ''}{member.finished_at ? ' ✓' : ''}
             </button>)}
           </div>
