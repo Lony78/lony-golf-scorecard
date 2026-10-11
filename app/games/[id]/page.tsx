@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabase';
@@ -123,7 +123,6 @@ export default function GameDetail() {
   const coursePar = holes.reduce((sum, h) => sum + h.par, 0);
   const selected = members.find(member => member.id === activePlayer);
   const myMember = members.find(member => member.player_id === userId);
-  const myScores = myMember ? scores[myMember.id] || {} : {};
 
   function playingHandicap(member: Member): number | null {
     if (member.handicap_snapshot === null || rating?.course_rating == null || rating?.slope_rating == null || holes.length !== 18) return null;
@@ -205,6 +204,54 @@ export default function GameDetail() {
         </button>)}
         <p className="muted">Výsledky se automaticky aktualizují každých 5 sekund, když je stránka otevřená. {lastRefresh && `Poslední aktualizace: ${lastRefresh}`}</p>
         <button type="button" className="btn secondary" onClick={() => void refreshResults()}>Aktualizovat výsledky</button>
+      </div>
+      <div className="panel">
+        <h2>Společná scorekarta flightu</h2>
+        <p className="muted">Všichni hráči na jedné scorekartě. Své rány můžeš zapisovat přímo zde; ostatní hráče můžeš pouze sledovat. Na mobilu posuň tabulku do strany.</p>
+        {visible.length !== expected && <p className="error">Hřiště nemá všech {expected} jamek. Zápis není dostupný.</p>}
+        <div className="score-scroll" style={{ overflowX: 'auto', maxWidth: '100%' }}>
+          <table className="score-table" style={{ minWidth: 380 + members.length * (game.scoring === 'stableford' ? 145 : 85) }}>
+            <thead>
+              <tr>
+                <th rowSpan={2}>Jamka</th><th rowSpan={2}>PAR</th><th rowSpan={2}>SI</th>
+                {members.map(member => <th key={member.id} colSpan={game.scoring === 'stableford' ? 2 : 1} scope="colgroup" style={{ textAlign: 'center', background: member.player_id === userId ? 'rgba(45,130,85,0.15)' : undefined }}>
+                  {member.nickname}{member.player_id === userId ? ' (já)' : ''}
+                  <div style={{ fontSize: '0.8em', fontWeight: 400 }}>HCP {member.handicap_snapshot ?? '–'}{playingHandicap(member) !== null ? ` · Herní ${playingHandicap(member)}` : ''}</div>
+                </th>)}
+              </tr>
+              <tr>{members.map(member => <Fragment key={member.id}><th>Rány</th>{game.scoring === 'stableford' && <th>Body</th>}</Fragment>)}</tr>
+            </thead>
+            <tbody>
+              {visible.map(hole => <tr key={hole.hole_number}>
+                <th scope="row">{hole.hole_number}</th><td>{hole.par}</td><td>{hole.stroke_index}</td>
+                {members.map(member => {
+                  const score = scores[member.id]?.[hole.hole_number];
+                  const editable = member.player_id === userId && !member.finished_at && visible.length === expected;
+                  return <Fragment key={member.id}>
+                    <td style={{ background: member.player_id === userId ? 'rgba(45,130,85,0.08)' : undefined }}>
+                      {editable ? <select
+                        aria-label={`Rány ${member.nickname}, jamka ${hole.hole_number} – společná scorekarta`}
+                        disabled={busy}
+                        value={score?.picked_up ? 'X' : score?.strokes ?? ''}
+                        onChange={e => void save(hole.hole_number, e.target.value)}
+                      >
+                        <option value="">–</option>
+                        {Array.from({ length: 30 }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1}</option>)}
+                        <option value="X">X</option>
+                      </select> : score?.picked_up ? 'X' : score?.strokes ?? '–'}
+                    </td>
+                    {game.scoring === 'stableford' && <td>{points(member, hole) ?? '–'}</td>}
+                  </Fragment>;
+                })}
+              </tr>)}
+            </tbody>
+            <tfoot><tr>
+              <th>Celkem</th><th>{visible.reduce((sum, hole) => sum + hole.par, 0)}</th><th>–</th>
+              {members.map(member => <Fragment key={member.id}><th>{totalStrokes(member)}</th>{game.scoring === 'stableford' && <th>{totalPoints(member) ?? '–'}</th>}</Fragment>)}
+            </tr></tfoot>
+          </table>
+        </div>
+        {game.scoring === 'stableford' && expected !== 18 && <p className="muted">Stableford body jsou v této verzi dostupné pouze pro 18 jamek.</p>}
       </div>
       {selected && <div className="panel">
         <h2>Scorekarta: {selected.nickname}</h2>
