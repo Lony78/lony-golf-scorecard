@@ -5,11 +5,11 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../lib/supabase';
 
-type Member = { id: string; game_id: string; handicap_snapshot: number | null; finished_at: string | null };
+type Member = { id: string; game_id: string; handicap_snapshot: number | null; finished_at: string | null; finish_reason: string | null; finish_note: string | null };
 type Game = { id: string; name: string; play_date: string; holes_count: number; scoring: string; tee_id: string; course_id: string };
 type Hole = { hole_number: number; par: number; stroke_index: number };
 type Score = { hole_number: number; strokes: number | null; picked_up: boolean };
-type Entry = { game: Game; courseName: string; strokes: number; points: number | null; pickedUp: number; finishedAt: string | null };
+type Entry = { game: Game; courseName: string; strokes: number; points: number | null; pickedUp: number; finishedAt: string | null; finishReason: string | null; finishNote: string | null; playedHoles: number };
 
 export default function HistoryPage() {
   const router = useRouter();
@@ -28,7 +28,7 @@ export default function HistoryPage() {
 
         // A completed game is defined by the logged-in player's finished_at.
         const { data: members, error: membersError } = await client.from('game_players')
-          .select('id,game_id,handicap_snapshot,finished_at')
+          .select('id,game_id,handicap_snapshot,finished_at,finish_reason,finish_note')
           .eq('player_id', user.id).not('finished_at', 'is', null);
         if (membersError) throw membersError;
         const completed = (members || []) as Member[];
@@ -58,6 +58,7 @@ export default function HistoryPage() {
           const byHole = new Map(scores.map(s => [s.hole_number, s]));
           const strokes = scores.reduce((sum, s) => sum + (s.strokes ?? 0), 0);
           const pickedUp = scores.filter(s => s.picked_up).length;
+          const playedHoles = visible.filter(h => byHole.has(h.hole_number)).length;
           let points: number | null = null;
           const tee = teeResult.data;
           if (game.scoring === 'stableford' && game.holes_count === 18 && holes.length === 18 &&
@@ -71,7 +72,7 @@ export default function HistoryPage() {
               return sum + Math.max(0, 2 + hole.par + extra - score.strokes);
             }, 0);
           }
-          return { game, courseName: courseResult.data?.name || 'Hřiště neuvedeno', strokes, points, pickedUp, finishedAt: member.finished_at } as Entry;
+          return { game, courseName: courseResult.data?.name || 'Hřiště neuvedeno', strokes, points, pickedUp, finishedAt: member.finished_at, finishReason: member.finish_reason, finishNote: member.finish_note, playedHoles } as Entry;
         }));
         if (active) setEntries(results.filter((entry): entry is Entry => entry !== null));
       } catch (err) {
@@ -89,19 +90,29 @@ export default function HistoryPage() {
       <p className="brand">LONY GOLF SCORECARD</p>
       <div className="panel">
         <h1>Historie her</h1>
-        <p className="muted">Tvé dokončené golfové hry a dosažené výsledky.</p>
+        <p className="muted">Tvé dokončené i předčasně ukončené golfové hry a dosažené výsledky.</p>
         {loading && <p>Načítám historii…</p>}
         {error && <p className="error" role="alert">{error}</p>}
-        {!loading && !error && entries.length === 0 && <p>Zatím nemáš žádnou dokončenou hru.</p>}
+        {!loading && !error && entries.length === 0 && <p>Zatím nemáš žádnou ukončenou hru.</p>}
         {!loading && !error && <div style={{ display: 'grid', gap: 12 }}>
-          {entries.map(({ game, courseName, strokes, points, pickedUp }) => (
+          {entries.map(({ game, courseName, strokes, points, pickedUp, finishReason, finishNote, playedHoles, finishedAt }) => (
             <Link key={game.id} href={'/games/' + game.id} style={{ display: 'block', padding: 16, borderRadius: 14, background: '#eef3e5', color: '#173b29', textDecoration: 'none' }}>
               <strong style={{ fontSize: '1.12rem' }}>{game.name}</strong>
+              <div style={{ marginTop: 9, display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+                <span style={{ display: 'inline-block', padding: '5px 10px', borderRadius: 999, background: finishReason ? '#f8e6d8' : '#dcebdc', color: finishReason ? '#884421' : '#1d6039', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>
+                  {finishReason ? 'Předčasně ukončeno' : 'Dokončeno'}
+                </span>
+                {finishedAt && <span style={{ fontSize: 12, opacity: 0.75 }}>Ukončeno {new Date(finishedAt).toLocaleDateString('cs-CZ')}</span>}
+              </div>
+              {finishReason && <div style={{ marginTop: 8, fontSize: 14 }}><strong>Důvod:</strong> {finishReason}</div>}
+              {finishReason && finishNote && <div style={{ marginTop: 4, fontSize: 13, overflowWrap: 'anywhere' }}><strong>Poznámka:</strong> {finishNote}</div>}
               <div style={{ marginTop: 5, opacity: 0.85 }}>{game.play_date} · {courseName} · {game.holes_count} jamek</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, marginTop: 12 }}>
+                <span><strong>{playedHoles}/{game.holes_count}</strong> jamek</span>
                 <span><strong>{strokes}</strong> ran{pickedUp > 0 ? ` · ${pickedUp}× X` : ''}</span>
                 {game.scoring === 'stableford' && <span><strong>{points ?? '–'}</strong> Stableford bodů</span>}
               </div>
+              {finishReason && <div style={{ marginTop: 8, fontSize: 12, opacity: 0.8 }}>Nedokončený výsledek se nezapočítává do soutěžního pořadí.</div>}
               <div style={{ marginTop: 10, fontSize: '0.85rem', textDecoration: 'underline' }}>Otevřít scorekartu →</div>
             </Link>
           ))}
