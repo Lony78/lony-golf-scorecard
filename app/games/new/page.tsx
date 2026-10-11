@@ -40,7 +40,7 @@ export default function NewGame() {
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
   const [playersBusy, setPlayersBusy] = useState(false);
   const [playersError, setPlayersError] = useState('');
-  const [playerChoice, setPlayerChoice] = useState('');
+  const [showPlayerList, setShowPlayerList] = useState(false);
 
   useEffect(() => {
     supabase().from('courses').select('id,name').order('name').then(({ data, error }) => {
@@ -123,12 +123,11 @@ export default function NewGame() {
     if (selected.length >= 3) return;
     if (parseHandicap(player.handicap_index) === null) {
       setSearchError('Tento hráč nemá platný handicap. Musí ho nejprve uložit ve svém profilu.');
-      setPlayerChoice('');
       return;
     }
     setSelected(prev => prev.some(p => p.id === player.id) ? prev : [...prev, player]);
     setMatches(prev => prev.filter(p => p.id !== player.id));
-    setPlayerChoice('');
+    setShowPlayerList(false);
     setSearchError('');
   }
 
@@ -233,26 +232,41 @@ export default function NewGame() {
           </label>
           <section aria-label="Spoluhráči" style={{ marginTop: 18, marginBottom: 18 }}>
             <h2 style={{ fontSize: '1.15rem', marginBottom: 8 }}>Spoluhráči ({selected.length}/3)</h2>
-            <p className="muted">Ty jsi prvním hráčem. Do stejného flightu můžeš přidat až tři další registrované hráče. Vyber je ze seznamu nebo vyhledej podle přezdívky.</p>
-            <label className="field">Vybrat ze seznamu registrovaných hráčů
-              <select
-                value={playerChoice}
-                onChange={e => {
-                  const id = e.target.value;
-                  setPlayerChoice(id);
-                  const player = allPlayers.find(p => p.id === id);
-                  if (player) addPlayer(player);
-                }}
-                disabled={busy || playersBusy || selected.length >= 3}
-              >
-                <option value="">{playersBusy ? 'Načítám hráče…' : 'Rozklikni a vyber hráče'}</option>
-                {allPlayers.filter(p => !selected.some(s => s.id === p.id)).map(p => (
-                  <option key={p.id} value={p.id}>
-                    {p.nickname} · HCP {p.handicap_index ?? 'neuveden'}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <p className="muted">Ty jsi prvním hráčem. Přidej až tři další registrované hráče.</p>
+            <button
+              type="button"
+              className="btn secondary"
+              aria-expanded={showPlayerList}
+              aria-controls="registered-player-list"
+              disabled={busy || selected.length >= 3}
+              onClick={() => setShowPlayerList(open => !open)}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 9, marginTop: 8, marginBottom: 10 }}
+            >
+              <span aria-hidden="true" style={{ fontSize: 22, fontWeight: 700, lineHeight: 1 }}>⊕</span>
+              {showPlayerList ? 'Zavřít seznam hráčů' : 'Přidat hráče'}
+            </button>
+            {showPlayerList && (
+              <div id="registered-player-list" style={{ border: '1px solid #c8d8ce', borderRadius: 12, padding: 10, marginBottom: 12 }}>
+                <p style={{ margin: '0 0 10px', fontWeight: 700 }}>Registrovaní hráči (A–Z)</p>
+                {playersBusy ? <p className="muted">Načítám hráče…</p> :
+                  allPlayers.filter(p => !selected.some(s => s.id === p.id))
+                    .sort((a, b) => a.nickname.localeCompare(b.nickname, 'cs', { sensitivity: 'base' }))
+                    .map(player => (
+                      <button
+                        key={player.id}
+                        type="button"
+                        disabled={busy || selected.length >= 3}
+                        onClick={() => addPlayer(player)}
+                        style={{ display: 'flex', width: '100%', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '11px 8px', marginBottom: 4, background: '#f1f6f2', border: '1px solid #dbe8de', borderRadius: 8, color: '#123d2b', textAlign: 'left', cursor: 'pointer' }}
+                      >
+                        <span style={{ overflowWrap: 'anywhere' }}>{player.nickname}</span>
+                        <span style={{ flexShrink: 0, fontSize: 12 }}>HCP {player.handicap_index ?? '–'}　＋</span>
+                      </button>
+                    ))}
+                {!playersBusy && allPlayers.filter(p => !selected.some(s => s.id === p.id)).length === 0 && !playersError &&
+                  <p className="muted">Žádní další registrovaní hráči nejsou k dispozici.</p>}
+              </div>
+            )}
             {playersError && <p className="error" role="alert">{playersError}</p>}
             <p className="muted">Nebo použij vyhledávání:</p>
             <label className="field">Vyhledat podle přezdívky
