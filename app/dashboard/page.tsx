@@ -11,6 +11,7 @@ export default function Dashboard() {
   const [nickname, setNickname] = useState('');
   const [hcp, setHcp] = useState<number | null>(null);
   const [avatar, setAvatar] = useState('');
+  const [isAdmin, setIsAdmin] = useState(false);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [active, setActive] = useState<Game | null>(null);
@@ -30,6 +31,10 @@ export default function Dashboard() {
         const handicap = profile?.handicap_index ?? user.user_metadata?.handicap_index;
         setHcp(handicap === null || handicap === undefined || handicap === '' ? null : Number(handicap));
         setAvatar(String(user.user_metadata?.avatar_url || ''));
+        // Oprávnění zjišťujeme na serveru přes databázovou funkci, nikoli podle přezdívky.
+        const { data: adminAllowed, error: adminError } = await client.rpc('is_admin');
+        if (!live) return;
+        setIsAdmin(!adminError && adminAllowed === true);
         setLoading(false);
         const { data: memberships, error: memberError } = await client.from('game_players').select('game_id,finished_at').eq('player_id',user.id).is('finished_at',null);
         if (memberError) throw memberError;
@@ -88,6 +93,7 @@ export default function Dashboard() {
             <div style={{minWidth:0}}><div style={{fontWeight:800,overflowWrap:'anywhere'}}>{nickname} <span style={{fontWeight:400,fontSize:12,whiteSpace:'nowrap'}}>HCP {hcp === null || !Number.isFinite(hcp) ? '–' : hcp.toLocaleString('cs-CZ')}</span></div><small>Můj účet</small></div>
           </div>
           <Link role="menuitem" href="/profile" onClick={() => setOpen(false)} style={{display:'block',padding:'13px 4px',color:'#173b29',textDecoration:'none',fontWeight:700}}>✎ Upravit profil</Link>
+          {isAdmin && <Link role="menuitem" href="/admin" onClick={() => setOpen(false)} style={{display:'block',padding:'13px 4px',color:'#173b29',textDecoration:'none',fontWeight:700,borderTop:'1px solid #e1e8df'}}>⚙ Administrace</Link>}
           <button role="menuitem" type="button" onClick={logout} style={{width:'100%',textAlign:'left',padding:'13px 4px',background:'transparent',border:0,borderTop:'1px solid #e1e8df',color:'#173b29',cursor:'pointer'}}>↪ Odhlásit se</button>
         </div>}
       </div>
