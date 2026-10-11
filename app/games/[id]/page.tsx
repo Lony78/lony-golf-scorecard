@@ -27,6 +27,7 @@ export default function GameDetail() {
   const savingRef = useRef(false);
   const refreshingRef = useRef(false);
   const [lastRefresh, setLastRefresh] = useState('');
+  const [mobileHole, setMobileHole] = useState(1);
 
   const load = useCallback(async () => {
     const client = supabase();
@@ -120,6 +121,9 @@ export default function GameDetail() {
   const visible = holes.filter(h => h.hole_number <= expected);
   const coursePar = holes.reduce((sum, h) => sum + h.par, 0);
   const myMember = members.find(member => member.player_id === userId);
+  const activeHole = visible.find(h => h.hole_number === mobileHole) || visible[0];
+  const activeScore = myMember && activeHole ? scores[myMember.id]?.[activeHole.hole_number] : undefined;
+  const completedCount = myMember ? visible.filter(h => Boolean(scores[myMember.id]?.[h.hole_number])).length : 0;
 
   function playingHandicap(member: Member): number | null {
     if (member.handicap_snapshot === null || rating?.course_rating == null || rating?.slope_rating == null || holes.length !== 18) return null;
@@ -185,11 +189,37 @@ export default function GameDetail() {
   }
 
   return <main>
+    <style>{`
+      .golf-mobile { display: none; }
+      @media (max-width: 700px) {
+        main:has(.golf-mobile) { padding: 16px 12px 70px !important; width: 100% !important; max-width: 100% !important; }
+        main:has(.golf-mobile) > h1 { font-size: 25px; }
+        .golf-desktop { display: none !important; }
+        .golf-mobile { display: block; }
+        .golf-mobile .mobile-card { background: #fff; color: #123d2b; border-radius: 18px; padding: 18px; margin: 14px 0; }
+        .golf-mobile .mobile-nav { display: flex; gap: 10px; justify-content: space-between; align-items: center; }
+        .golf-mobile .mobile-nav button { flex: 1; min-width: 0; padding: 14px 8px; border: 1px solid #c8d8ce; background: #f1f6f2; color: #123d2b; border-radius: 12px; font-size: 15px; font-weight: 700; }
+        .golf-mobile button:disabled { opacity: .45; }
+        .golf-mobile .mobile-stepper { display: flex; align-items: center; justify-content: center; gap: 25px; padding: 20px 0; }
+        .golf-mobile .mobile-stepper button { height: 66px; width: 66px; border-radius: 16px; border: 0; background: #103e2c; color: white; font-size: 34px; font-weight: 700; }
+        .golf-mobile .mobile-number { font-size: 52px; font-weight: 800; min-width: 65px; text-align: center; }
+        .golf-mobile .mobile-sub { color: #547163; font-size: 13px; }
+        .golf-mobile .mobile-rows { width: 100%; border-collapse: collapse; }
+        .golf-mobile .mobile-rows td { padding: 11px 2px; border-bottom: 1px solid #e1e9e3; }
+        .golf-mobile .mobile-rows td:last-child { text-align: right; font-weight: 700; }
+        .golf-mobile .mobile-pill { padding: 12px; background: #e9f2eb; border-radius: 12px; text-align: center; }
+        .golf-mobile .mobile-action { width: 100%; padding: 13px; border: 1px solid #c8d8ce; border-radius: 12px; background: #f1f6f2; color: #123d2b; font-weight: 700; margin-top: 8px; }
+        .golf-mobile .mobile-holes { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+        .golf-mobile .mobile-holes button { padding: 11px 0; border: 1px solid #c8d8ce; border-radius: 9px; background: #f5f8f5; color: #123d2b; }
+        .golf-mobile .mobile-holes button.active { background: #103e2c; color: #fff; }
+        .golf-mobile .mobile-holes button.recorded:not(.active) { background: #dcefe0; }
+      }
+    `}</style>
     <p className="brand">LONY GOLF SCORECARD</p>
     {!game ? <p>{error || 'Načítám hru…'}</p> : <>
       <h1>{game.name}</h1>
       <p>{game.play_date} · {expected} jamek · {game.scoring === 'stableford' ? 'Stableford' : 'Na rány'}</p>
-      <div className="panel">
+      <div className="panel golf-desktop">
         <h2>Společná hra – flight</h2>
         <p className="muted">Hráči ve flightu. Každý zapisuje pouze své vlastní výsledky ve společné scorekartě.</p>
         {members.map(member => <div key={member.id} className="btn secondary"
@@ -201,7 +231,7 @@ export default function GameDetail() {
         <p className="muted">Výsledky se automaticky aktualizují každých 5 sekund, když je stránka otevřená. {lastRefresh && `Poslední aktualizace: ${lastRefresh}`}</p>
         <button type="button" className="btn secondary" onClick={() => void refreshResults()}>Aktualizovat výsledky</button>
       </div>
-      <div className="panel">
+      <div className="panel golf-desktop">
         <h2>Společná scorekarta flightu</h2>
         <p className="muted">Všichni hráči na jedné scorekartě. Své rány můžeš zapisovat přímo zde; ostatní hráče můžeš pouze sledovat. Na mobilu posuň tabulku do strany.</p>
         {visible.length !== expected && <p className="error">Hřiště nemá všech {expected} jamek. Zápis není dostupný.</p>}
@@ -249,12 +279,12 @@ export default function GameDetail() {
         </div>
         {game.scoring === 'stableford' && expected !== 18 && <p className="muted">Stableford body jsou v této verzi dostupné pouze pro 18 jamek.</p>}
       </div>
-      {myMember && <div className="panel">
+      {myMember && <div className="panel golf-desktop">
         <h2>Dokončení hry</h2>
         {myMember.finished_at ? <p className="success">Hru jsi dokončil.</p> :
           <button className="btn secondary" disabled={busy || !complete(myMember)} onClick={finish}>Potvrdit dokončení hry</button>}
       </div>}
-      <div className="panel">
+      <div className="panel golf-desktop">
         <h2>Průběžné výsledky</h2>
         <div className="score-scroll"><table className="score-table">
           <thead><tr><th>Hráč</th><th>HCP</th><th>Rány</th>{game.scoring === 'stableford' && <th>Body</th>}</tr></thead>
@@ -264,6 +294,46 @@ export default function GameDetail() {
         </table></div>
         <p className="muted">Pořadí je průběžné. Nula ran může znamenat, že hráč ještě nezapsal výsledek. Výsledky ostatních hráčů se načítají automaticky každých 5 sekund.</p>
       </div>
+      <section className="golf-mobile" aria-label="Mobilní scorekarta">
+        <div className="mobile-card">
+          <div className="mobile-nav">
+            <strong>Jamka {activeHole?.hole_number ?? '–'} / {expected}</strong>
+            <span className="mobile-sub">{completedCount} z {expected} zapsáno</span>
+          </div>
+          {activeHole && <>
+            <p className="mobile-sub">PAR {activeHole.par} · SI {activeHole.stroke_index}{activeHole.length_m != null ? ` · ${activeHole.length_m} m` : ''}</p>
+            <div className="mobile-nav" style={{ marginTop: 16 }}>
+              <div><strong>{myMember?.nickname || 'Moje skóre'}</strong><div className="mobile-sub">Herní HCP {myMember ? playingHandicap(myMember) ?? '–' : '–'}</div></div>
+              <div style={{ textAlign: 'right' }}><strong>{myMember ? totalPoints(myMember) ?? '–' : '–'}</strong><div className="mobile-sub">Celkem bodů</div></div>
+            </div>
+            <div className="mobile-stepper">
+              <button type="button" aria-label="Odebrat ránu" disabled={!myMember || Boolean(myMember.finished_at) || busy || visible.length !== expected || !activeScore?.strokes || activeScore.strokes <= 1} onClick={() => void save(activeHole.hole_number, String((activeScore?.strokes || 1) - 1))}>−</button>
+              <div><div className="mobile-number">{activeScore?.picked_up ? 'X' : activeScore?.strokes ?? '–'}</div><div className="mobile-sub" style={{ textAlign: 'center' }}>ran</div></div>
+              <button type="button" aria-label="Přidat ránu" disabled={!myMember || Boolean(myMember.finished_at) || busy || visible.length !== expected || (activeScore?.strokes ?? 0) >= 30} onClick={() => void save(activeHole.hole_number, String(activeScore?.strokes ? activeScore.strokes + 1 : 1))}>+</button>
+            </div>
+            {game.scoring === 'stableford' && <div className="mobile-pill"><strong style={{ fontSize: 26 }}>{myMember ? points(myMember, activeHole) ?? '–' : '–'}</strong><div className="mobile-sub">Stableford bodů za jamku</div></div>}
+            <div className="mobile-nav" style={{ marginTop: 12 }}>
+              <button type="button" disabled={!myMember || Boolean(myMember.finished_at) || busy || visible.length !== expected} onClick={() => void save(activeHole.hole_number, 'X')}>Zvednutý míč (X)</button>
+              <button type="button" disabled={!myMember || Boolean(myMember.finished_at) || busy || visible.length !== expected || !activeScore} onClick={() => void save(activeHole.hole_number, '')}>Smazat skóre</button>
+            </div>
+            <div className="mobile-nav" style={{ marginTop: 18 }}>
+              <button type="button" disabled={activeHole.hole_number <= 1} onClick={() => setMobileHole(Math.max(1, activeHole.hole_number - 1))}>← Předchozí</button>
+              <button type="button" disabled={activeHole.hole_number >= expected} onClick={() => setMobileHole(Math.min(expected, activeHole.hole_number + 1))}>Další →</button>
+            </div>
+          </>}
+        </div>
+        <div className="mobile-card">
+          <h3 style={{ marginTop: 0 }}>Přehled jamek</h3>
+          <div className="mobile-holes">{visible.map(h => <button key={h.hole_number} type="button" className={`${mobileHole === h.hole_number ? 'active' : ''} ${myMember && scores[myMember.id]?.[h.hole_number] ? 'recorded' : ''}`} onClick={() => setMobileHole(h.hole_number)}>{h.hole_number}</button>)}</div>
+        </div>
+        <div className="mobile-card">
+          <h3 style={{ marginTop: 0 }}>Průběžné výsledky</h3>
+          <table className="mobile-rows"><tbody>{[...members].sort((a,b) => game.scoring === 'stableford' ? (totalPoints(b) ?? -1) - (totalPoints(a) ?? -1) : totalStrokes(a) - totalStrokes(b)).map((member,i) => <tr key={member.id}><td>{i+1}. {member.nickname}{member.player_id === userId ? ' (já)' : ''}</td><td>{game.scoring === 'stableford' ? `${totalPoints(member) ?? '–'} b` : `${totalStrokes(member)} ran`}</td></tr>)}</tbody></table>
+          <p className="mobile-sub">Aktualizace každých 5 sekund. {lastRefresh && `Naposledy ${lastRefresh}`}</p>
+          <button type="button" className="mobile-action" onClick={() => void refreshResults()}>Aktualizovat výsledky</button>
+        </div>
+        {myMember && <div className="mobile-card"><h3 style={{ marginTop: 0 }}>Dokončení hry</h3>{myMember.finished_at ? <p>Hra dokončena.</p> : <><p className="mobile-sub">Zapsáno {completedCount} z {expected} jamek. Hru lze dokončit až po vyplnění všech.</p><button type="button" className="mobile-action" disabled={busy || !complete(myMember)} onClick={() => void finish()}>Potvrdit dokončení hry</button></>}</div>}
+      </section>
       {notice && <p className="success" role="status">{notice}</p>}
       {error && <p className="error" role="alert">{error}</p>}
     </>}
