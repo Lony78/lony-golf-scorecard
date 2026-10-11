@@ -63,7 +63,16 @@ export default function Dashboard() {
     { label: 'Žebříček', href: '', icon: '🏆' },
     { label: 'Historie', href: '/history', icon: '↺' },
   ];
-  return <main>
+  return <main className="lony-dashboard">
+    <style>{`
+      .lony-dashboard { position: relative; isolation: isolate; overflow: hidden; max-width: 520px; min-height: 100dvh; background: radial-gradient(ellipse at 92% 33%, rgba(63,112,65,.5), transparent 43%), radial-gradient(ellipse at 10% 85%, rgba(48,91,47,.48), transparent 48%), linear-gradient(160deg,#0d291c 0%,#0b2619 53%,#193e25 100%); }
+      .lony-dashboard::before { content: ''; position: absolute; inset: 0; z-index: -1; background: url('/golf-contours.svg') center 5% / 100% auto repeat-y; opacity: .64; pointer-events: none; }
+      .lony-dashboard::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 310px; z-index: -1; background: linear-gradient(to bottom,#102c1d 0%,rgba(16,44,29,.2) 36%,rgba(7,28,17,.25) 100%),url('/golf-grass.jpg') center bottom / cover no-repeat; pointer-events: none; }
+      .lony-dashboard .lony-card { position: relative; overflow: hidden; min-width: 0; min-height: 120px; background: linear-gradient(145deg,#f7f9ee,#e9f1df); color: #203e2d; border-radius: 20px; padding: 18px; text-decoration: none; display: flex; flex-direction: column; justify-content: center; gap: 12px; box-shadow: 0 8px 22px rgba(0,0,0,.12); }
+      .lony-dashboard .lony-card::before { content: ''; position: absolute; width: 160px; height: 145px; border-radius: 65% 0 0 0; right: -70px; bottom: -80px; background: rgba(151,187,137,.13); transform: rotate(-25deg); pointer-events: none; }
+      .lony-dashboard .lony-card:focus-visible { outline: 3px solid #d9e7b5; outline-offset: 3px; }
+      @media (min-width: 600px) { .lony-dashboard { border-left: 1px solid rgba(255,255,255,.06); border-right: 1px solid rgba(255,255,255,.06); } }
+    `}</style>
     <header style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:12,position:'relative',marginBottom:28}}>
       <p className="brand" style={{margin:0,fontSize:'clamp(11px,2.7vw,15px)'}}>LONY GOLF SCORECARD</p>
       <div ref={menuRef} style={{position:'relative',flexShrink:0}}>
@@ -84,7 +93,7 @@ export default function Dashboard() {
     <h1 style={{marginBottom:8}}>Ahoj, {nickname}!</h1>
     <p style={{color:'#d9e7b5',marginBottom:24}}>Tvůj golfový přehled</p>
     <div style={{display:'grid',gridTemplateColumns:'repeat(2,minmax(0,1fr))',gap:12}}>
-      {items.map(item => item.href ? <Link key={item.label} href={item.href} style={{minWidth:0,minHeight:120,background:'#eef3e5',color:'#203e2d',borderRadius:16,padding:18,textDecoration:'none',display:'flex',flexDirection:'column',justifyContent:'center',gap:13,fontWeight:750,fontSize:'clamp(16px,3.6vw,22px)'}}><span aria-hidden="true" style={{fontSize:25}}>{item.icon}</span>{item.label}</Link> : <div key={item.label} style={{minWidth:0,minHeight:120,background:'#eef3e5',color:'#203e2d',borderRadius:16,padding:18,display:'flex',flexDirection:'column',justifyContent:'center',gap:9}}><span aria-hidden="true" style={{fontSize:25}}>{item.icon}</span><strong style={{fontSize:'clamp(16px,3.6vw,22px)'}}>{item.label}</strong><small style={{color:'#587160'}}>{item.label === 'Aktivní hra' ? activeLoading ? 'Načítám…' : activeError ? 'Nelze načíst' : 'Žádná rozehraná hra' : 'Připravujeme'}</small></div>)}
+      {items.map(item => item.href ? <Link className="lony-card" key={item.label} href={item.href} style={{fontWeight:750,fontSize:'clamp(16px,3.6vw,22px)'}}><span aria-hidden="true" style={{fontSize:25}}>{item.icon}</span><span>{item.label}</span></Link> : <div className="lony-card" key={item.label}><span aria-hidden="true" style={{fontSize:25}}>{item.icon}</span><strong style={{fontSize:'clamp(16px,3.6vw,22px)'}}>{item.label}</strong><small style={{color:'#587160'}}>{item.label === 'Aktivní hra' ? activeLoading ? 'Načítám…' : activeError ? 'Nelze načíst' : 'Žádná rozehraná hra' : 'Připravujeme'}</small></div>)}
     </div>
     {activeError && <p role="alert" style={{color:'#f9c8b7',marginTop:12}}>Aktivní hra: {activeError}</p>}
   </main>;
