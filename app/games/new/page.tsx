@@ -39,6 +39,8 @@ export default function NewGame() {
   const [playersBusy, setPlayersBusy] = useState(false);
   const [playersError, setPlayersError] = useState('');
   const [showPlayerList, setShowPlayerList] = useState(false);
+  const [activePlayerIds, setActivePlayerIds] = useState<string[]>([]);
+  const [checkingActive, setCheckingActive] = useState(true);
 
   useEffect(() => {
     supabase().from('courses').select('id,name').order('name').then(({ data, error }) => {
@@ -91,6 +93,26 @@ export default function NewGame() {
     return () => { active = false; };
   }, []);
 
+  useEffect(() => {
+    let mounted = true;
+    async function checkActive() {
+      try {
+        const client = supabase();
+        const { data: { user }, error: authError } = await client.auth.getUser();
+        if (authError) throw authError;
+        if (!user) return;
+        const { data, error } = await client.from('game_players')
+          .select('player_id').is('finished_at', null);
+        if (error) throw error;
+        if (mounted) setActivePlayerIds((data || []).map(p => p.player_id));
+      } catch (e) {
+        if (mounted) setError(e instanceof Error ? e.message : 'Nepodařilo se ověřit aktivní hry.');
+      } finally { if (mounted) setCheckingActive(false); }
+    }
+    void checkActive();
+    return () => { mounted = false; };
+  }, []);
+
   // Seznam je načtený při otevření stránky; výsledky se mění ihned při psaní.
   const normalizedSearch = search.trim().toLocaleLowerCase('cs');
   const matchingPlayers = normalizedSearch.length > 0
@@ -102,6 +124,10 @@ export default function NewGame() {
 
   function addPlayer(player: Player) {
     if (selected.length >= 3) return;
+    if (activePlayerIds.includes(player.id)) {
+      setSearchError('Tento hráč už má aktivní hru a nelze ho přidat do dalšího flightu.');
+      return;
+    }
     if (parseHandicap(player.handicap_index) === null) {
       setSearchError('Tento hráč nemá platný handicap. Musí ho nejprve uložit ve svém profilu.');
       return;
@@ -114,6 +140,7 @@ export default function NewGame() {
 
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (checkingActive) { setError('Počkej na ověření aktivních her.'); return; }
     if (!course || !tee) {
       setError('Vyber hřiště a odpaliště.');
       return;
@@ -275,12 +302,12 @@ export default function NewGame() {
                         <button
                           key={player.id}
                           type="button"
-                          disabled={busy || selected.length >= 3}
+                          disabled={busy || selected.length >= 3 || activePlayerIds.includes(player.id)}
                           onClick={() => addPlayer(player)}
                           style={{ display: 'flex', width: '100%', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '11px 8px', marginBottom: 4, background: '#f1f6f2', border: '1px solid #dbe8de', borderRadius: 8, color: '#123d2b', textAlign: 'left', cursor: 'pointer' }}
                         >
                           <span style={{ overflowWrap: 'anywhere' }}>{player.nickname}</span>
-                          <span style={{ flexShrink: 0, fontSize: 12 }}>HCP {player.handicap_index ?? '–'}　＋</span>
+                          <span style={{ flexShrink: 0, fontSize: 12 }}>{activePlayerIds.includes(player.id) ? 'Aktivní hra' : `HCP ${player.handicap_index ?? '–'}　＋`}</span>
                         </button>
                       ))}
                     </div>
