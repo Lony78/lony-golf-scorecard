@@ -253,6 +253,22 @@ export default function GameDetail() {
         .golf-mobile .mobile-score-table select { font-size: 11px; }
         .golf-mobile .mobile-score-table .player-col { width: auto; }
 
+        /* Read-only scorecard: each player's strokes and points form one color family. */
+        .score-table .stroke-value, .mobile-score-table .stroke-value { font-weight: 800 !important; box-shadow: none !important; border-radius: 0 !important; outline: none !important; }
+        .score-table .point-value, .mobile-score-table .point-value { font-weight: 400 !important; box-shadow: none !important; }
+        .score-table .player-group-0.stroke-value, .mobile-score-table .player-group-0.stroke-value { background: #d6eadc; color: #133e2b; }
+        .score-table .player-group-0.point-value, .mobile-score-table .player-group-0.point-value { background: #e9f5ec; color: #326d50; }
+        .score-table .player-group-1.stroke-value, .mobile-score-table .player-group-1.stroke-value { background: #d5e4fa; color: #173d68; }
+        .score-table .player-group-1.point-value, .mobile-score-table .player-group-1.point-value { background: #edf4ff; color: #36618d; }
+        .score-table .player-group-2.stroke-value, .mobile-score-table .player-group-2.stroke-value { background: #f9e2bb; color: #76440b; }
+        .score-table .player-group-2.point-value, .mobile-score-table .player-group-2.point-value { background: #fff2dd; color: #936b2d; }
+        .score-table .player-group-3.stroke-value, .mobile-score-table .player-group-3.stroke-value { background: #e4d4f5; color: #503070; }
+        .score-table .player-group-3.point-value, .mobile-score-table .player-group-3.point-value { background: #f2eafb; color: #75568d; }
+        .score-table .player-start, .mobile-score-table .player-start { border-left: 2px solid #91a99b; }
+        .mobile-score-table td.stroke-value { border: 0; border-bottom: 1px solid #dce7df; }
+        .mobile-score-table td.point-value { border-bottom: 1px solid #dce7df; }
+
+
       }
     `}</style>
     <p className="brand">LONY GOLF SCORECARD</p>
@@ -280,12 +296,12 @@ export default function GameDetail() {
             <thead>
               <tr>
                 <th rowSpan={2}>Jamka</th><th rowSpan={2}>PAR</th>
-                {members.map(member => <th key={member.id} colSpan={game.scoring === 'stableford' ? 2 : 1} scope="colgroup" style={{ textAlign: 'center', background: member.player_id === userId ? 'rgba(45,130,85,0.15)' : undefined }}>
+                {members.map((member, index) => <th key={member.id} className={`player-group-${index} player-start`} colSpan={game.scoring === 'stableford' ? 2 : 1} scope="colgroup" style={{ textAlign: 'center' }}>
                   {member.nickname}{member.player_id === userId ? ' (já)' : ''}
                   <div style={{ fontSize: '0.8em', fontWeight: 400 }}>HCP {member.handicap_snapshot ?? '–'}{playingHandicap(member) !== null ? ` · Herní ${playingHandicap(member)}` : ''}</div>
                 </th>)}
               </tr>
-              <tr>{members.map((member, index) => <Fragment key={member.id}><th className={`player-group-${index} player-start`} title="Rány">R</th>{game.scoring === 'stableford' && <th className={`player-group-${index}`} title="Body">B</th>}</Fragment>)}</tr>
+              <tr>{members.map((member, index) => <Fragment key={member.id}><th className={`player-group-${index} player-start stroke-value`} title="Rány">R</th>{game.scoring === 'stableford' && <th className={`player-group-${index} point-value`} title="Body">B</th>}</Fragment>)}</tr>
             </thead>
             <tbody>
               {visible.map(hole => <tr key={hole.hole_number}>
@@ -293,17 +309,17 @@ export default function GameDetail() {
                 {members.map((member, index) => {
                   const score = scores[member.id]?.[hole.hole_number];
                   return <Fragment key={member.id}>
-                    <td className={`player-group-${index} player-start`}>
+                    <td className={`player-group-${index} player-start stroke-value`}>
                       {score?.picked_up ? 'X' : score?.strokes ?? '–'}
                     </td>
-                    {game.scoring === 'stableford' && <td className={`player-group-${index}`}>{points(member, hole) ?? '–'}</td>}
+                    {game.scoring === 'stableford' && <td className={`player-group-${index} point-value`}>{points(member, hole) ?? '–'}</td>}
                   </Fragment>;
                 })}
               </tr>)}
             </tbody>
             <tfoot><tr>
               <th>Celkem</th><th>{visible.reduce((sum, hole) => sum + hole.par, 0)}</th>
-              {members.map(member => <Fragment key={member.id}><th>{totalStrokes(member)}</th>{game.scoring === 'stableford' && <th>{totalPoints(member) ?? '–'}</th>}</Fragment>)}
+              {members.map((member, index) => <Fragment key={member.id}><th className={`player-group-${index} player-start stroke-value`}>{totalStrokes(member)}</th>{game.scoring === 'stableford' && <th className={`player-group-${index} point-value`}>{totalPoints(member) ?? '–'}</th>}</Fragment>)}
             </tr></tfoot>
           </table>
         </div>
@@ -389,21 +405,21 @@ export default function GameDetail() {
               </colgroup>
               <thead>
                 <tr><th rowSpan={2} title="Jamka">J</th><th rowSpan={2}>PAR</th>{members.map((member, index) => <th key={member.id} className={`player-group-${index} player-start`} colSpan={game.scoring === 'stableford' ? 2 : 1} title={member.nickname}><span className="player-name">{member.nickname}{member.player_id === userId ? ' (já)' : ''}</span></th>)}</tr>
-                <tr>{members.map((member, index) => <Fragment key={member.id}><th className={`player-group-${index} player-start`} title="Rány">R</th>{game.scoring === 'stableford' && <th className={`player-group-${index}`} title="Body">B</th>}</Fragment>)}</tr>
+                <tr>{members.map((member, index) => <Fragment key={member.id}><th className={`player-group-${index} player-start stroke-value`} title="Rány">R</th>{game.scoring === 'stableford' && <th className={`player-group-${index} point-value`} title="Body">B</th>}</Fragment>)}</tr>
               </thead>
               <tbody>{visible.map(hole => <tr key={hole.hole_number}>
                 <th>{hole.hole_number}</th><td>{hole.par}</td>
                 {members.map((member, index) => {
                   const score = scores[member.id]?.[hole.hole_number];
                   return <Fragment key={member.id}>
-                    <td className={`player-group-${index} player-start ${member.player_id === userId ? 'my-score' : ''}`}>
+                    <td className={`player-group-${index} player-start stroke-value`}>
                       {score?.picked_up ? 'X' : score?.strokes ?? '–'}
                     </td>
-                    {game.scoring === 'stableford' && <td className={`player-group-${index}`}>{points(member, hole) ?? '–'}</td>}
+                    {game.scoring === 'stableford' && <td className={`player-group-${index} point-value`}>{points(member, hole) ?? '–'}</td>}
                   </Fragment>;
                 })}
               </tr>)}</tbody>
-              <tfoot><tr><th title="Celkem">Σ</th><th>{visible.reduce((sum, hole) => sum + hole.par, 0)}</th>{members.map((member, index) => <Fragment key={member.id}><th className={`player-group-${index} player-start`}>{totalStrokes(member)}</th>{game.scoring === 'stableford' && <th className={`player-group-${index}`}>{totalPoints(member) ?? '–'}</th>}</Fragment>)}</tr></tfoot>
+              <tfoot><tr><th title="Celkem">Σ</th><th>{visible.reduce((sum, hole) => sum + hole.par, 0)}</th>{members.map((member, index) => <Fragment key={member.id}><th className={`player-group-${index} player-start stroke-value`}>{totalStrokes(member)}</th>{game.scoring === 'stableford' && <th className={`player-group-${index} point-value`}>{totalPoints(member) ?? '–'}</th>}</Fragment>)}</tr></tfoot>
             </table>
           </div>
         </div>}
