@@ -184,7 +184,7 @@ export default function GameDetail() {
       const { error: e } = await supabase().from('game_players').update({ finished_at: new Date().toISOString() }).eq('id', myMember.id).eq('player_id', userId);
       if (e) throw e;
       setMembers(prev => prev.map(member => member.id === myMember.id ? { ...member, finished_at: new Date().toISOString() } : member));
-      setNotice('Tvoje hra je dokončena.');
+       router.replace('/history');
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { savingRef.current = false; setBusy(false); }
   }
