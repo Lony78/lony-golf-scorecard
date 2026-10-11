@@ -238,7 +238,19 @@ export default function GameDetail() {
         .golf-mobile .mobile-score-table .my-score { background: #e5f0e8; }
         .golf-mobile .mobile-score-table select { display: block; width: 100%; min-width: 0; max-width: none; height: 28px; padding: 0; margin: 0; border: 1px solid #c8d8ce; border-radius: 4px; background: #fff; color: #123d2b; font-size: 12px; text-align: center; text-align-last: center; appearance: none; -webkit-appearance: none; }
         .golf-mobile .mobile-score-table tfoot th { font-weight: 800; border-top: 2px solid #c8d8ce; }
-        .golf-mobile .mobile-score-table .base-col { width: 7%; }
+        .golf-mobile .mobile-score-table .base-col { width: 10%; }
+        .golf-mobile .mobile-score-table .player-group-0 { background: #e4f2e8; }
+        .golf-mobile .mobile-score-table .player-group-1 { background: #e7efff; }
+        .golf-mobile .mobile-score-table .player-group-2 { background: #fff1dc; }
+        .golf-mobile .mobile-score-table .player-group-3 { background: #f1e8f8; }
+        .golf-mobile .mobile-score-table .player-start { border-left: 2px solid #91a99b; }
+        .golf-mobile .mobile-score-table thead .player-group-0 { background: #cce5d3; }
+        .golf-mobile .mobile-score-table thead .player-group-1 { background: #d0dffc; }
+        .golf-mobile .mobile-score-table thead .player-group-2 { background: #f9dfb6; }
+        .golf-mobile .mobile-score-table thead .player-group-3 { background: #e4d5f1; }
+        .golf-mobile .mobile-score-table .my-score { box-shadow: inset 0 0 0 1px #81a995; }
+        .golf-mobile .mobile-score-table .player-name { font-size: clamp(7px, 2.2vw, 11px); }
+        .golf-mobile .mobile-score-table select { font-size: 11px; }
         .golf-mobile .mobile-score-table .player-col { width: auto; }
 
       }
@@ -264,21 +276,21 @@ export default function GameDetail() {
         <p className="muted">Všichni hráči na jedné scorekartě. Své rány můžeš zapisovat přímo zde; ostatní hráče můžeš pouze sledovat. Na mobilu posuň tabulku do strany.</p>
         {visible.length !== expected && <p className="error">Hřiště nemá všech {expected} jamek. Zápis není dostupný.</p>}
         <div className="score-scroll" style={{ overflowX: 'auto', maxWidth: '100%' }}>
-          <table className="score-table" style={{ minWidth: 380 + members.length * (game.scoring === 'stableford' ? 145 : 85) }}>
+          <table className="score-table" style={{ minWidth: 290 + members.length * (game.scoring === 'stableford' ? 145 : 85) }}>
             <thead>
               <tr>
-                <th rowSpan={2}>Jamka</th><th rowSpan={2}>PAR</th><th rowSpan={2}>SI</th>
+                <th rowSpan={2}>Jamka</th><th rowSpan={2}>PAR</th>
                 {members.map(member => <th key={member.id} colSpan={game.scoring === 'stableford' ? 2 : 1} scope="colgroup" style={{ textAlign: 'center', background: member.player_id === userId ? 'rgba(45,130,85,0.15)' : undefined }}>
                   {member.nickname}{member.player_id === userId ? ' (já)' : ''}
                   <div style={{ fontSize: '0.8em', fontWeight: 400 }}>HCP {member.handicap_snapshot ?? '–'}{playingHandicap(member) !== null ? ` · Herní ${playingHandicap(member)}` : ''}</div>
                 </th>)}
               </tr>
-              <tr>{members.map(member => <Fragment key={member.id}><th title="Rány">R</th>{game.scoring === 'stableford' && <th title="Body">B</th>}</Fragment>)}</tr>
+              <tr>{members.map((member, index) => <Fragment key={member.id}><th className={`player-group-${index} player-start`} title="Rány">R</th>{game.scoring === 'stableford' && <th className={`player-group-${index}`} title="Body">B</th>}</Fragment>)}</tr>
             </thead>
             <tbody>
               {visible.map(hole => <tr key={hole.hole_number}>
-                <th scope="row">{hole.hole_number}</th><td>{hole.par}</td><td>{hole.stroke_index}</td>
-                {members.map(member => {
+                <th scope="row">{hole.hole_number}</th><td>{hole.par}</td>
+                {members.map((member, index) => {
                   const score = scores[member.id]?.[hole.hole_number];
                   const editable = member.player_id === userId && !member.finished_at && visible.length === expected;
                   return <Fragment key={member.id}>
@@ -294,13 +306,13 @@ export default function GameDetail() {
                         <option value="X">X</option>
                       </select> : score?.picked_up ? 'X' : score?.strokes ?? '–'}
                     </td>
-                    {game.scoring === 'stableford' && <td>{points(member, hole) ?? '–'}</td>}
+                    {game.scoring === 'stableford' && <td className={`player-group-${index}`}>{points(member, hole) ?? '–'}</td>}
                   </Fragment>;
                 })}
               </tr>)}
             </tbody>
             <tfoot><tr>
-              <th>Celkem</th><th>{visible.reduce((sum, hole) => sum + hole.par, 0)}</th><th>–</th>
+              <th>Celkem</th><th>{visible.reduce((sum, hole) => sum + hole.par, 0)}</th>
               {members.map(member => <Fragment key={member.id}><th>{totalStrokes(member)}</th>{game.scoring === 'stableford' && <th>{totalPoints(member) ?? '–'}</th>}</Fragment>)}
             </tr></tfoot>
           </table>
@@ -365,31 +377,31 @@ export default function GameDetail() {
           <div className="mobile-score-scroll">
             <table className="mobile-score-table">
               <colgroup>
-                <col className="base-col" /><col className="base-col" /><col className="base-col" />
+                <col className="base-col" /><col className="base-col" />
                 {members.map(member => <Fragment key={member.id}><col className="player-col" />{game.scoring === 'stableford' && <col className="player-col" />}</Fragment>)}
               </colgroup>
               <thead>
-                <tr><th rowSpan={2} title="Jamka">J</th><th rowSpan={2}>PAR</th><th rowSpan={2}>SI</th>{members.map(member => <th key={member.id} colSpan={game.scoring === 'stableford' ? 2 : 1} title={member.nickname}><span className="player-name">{member.nickname}{member.player_id === userId ? ' (já)' : ''}</span></th>)}</tr>
-                <tr>{members.map(member => <Fragment key={member.id}><th title="Rány">R</th>{game.scoring === 'stableford' && <th title="Body">B</th>}</Fragment>)}</tr>
+                <tr><th rowSpan={2} title="Jamka">J</th><th rowSpan={2}>PAR</th>{members.map((member, index) => <th key={member.id} className={`player-group-${index} player-start`} colSpan={game.scoring === 'stableford' ? 2 : 1} title={member.nickname}><span className="player-name">{member.nickname}{member.player_id === userId ? ' (já)' : ''}</span></th>)}</tr>
+                <tr>{members.map((member, index) => <Fragment key={member.id}><th className={`player-group-${index} player-start`} title="Rány">R</th>{game.scoring === 'stableford' && <th className={`player-group-${index}`} title="Body">B</th>}</Fragment>)}</tr>
               </thead>
               <tbody>{visible.map(hole => <tr key={hole.hole_number}>
-                <th>{hole.hole_number}</th><td>{hole.par}</td><td>{hole.stroke_index}</td>
-                {members.map(member => {
+                <th>{hole.hole_number}</th><td>{hole.par}</td>
+                {members.map((member, index) => {
                   const score = scores[member.id]?.[hole.hole_number];
                   const editable = member.player_id === userId && !member.finished_at && visible.length === expected;
                   return <Fragment key={member.id}>
-                    <td className={member.player_id === userId ? 'my-score' : ''}>
+                    <td className={`player-group-${index} player-start ${member.player_id === userId ? 'my-score' : ''}`}>
                       {editable ? <select aria-label={`Rány ${member.nickname}, jamka ${hole.hole_number}`} disabled={busy} value={score?.picked_up ? 'X' : score?.strokes ?? ''} onChange={e => void save(hole.hole_number, e.target.value)}>
                         <option value="">–</option>
                         {Array.from({ length: 30 }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1}</option>)}
                         <option value="X">X</option>
                       </select> : score?.picked_up ? 'X' : score?.strokes ?? '–'}
                     </td>
-                    {game.scoring === 'stableford' && <td>{points(member, hole) ?? '–'}</td>}
+                    {game.scoring === 'stableford' && <td className={`player-group-${index}`}>{points(member, hole) ?? '–'}</td>}
                   </Fragment>;
                 })}
               </tr>)}</tbody>
-              <tfoot><tr><th title="Celkem">Σ</th><th>{visible.reduce((sum, hole) => sum + hole.par, 0)}</th><th>–</th>{members.map(member => <Fragment key={member.id}><th>{totalStrokes(member)}</th>{game.scoring === 'stableford' && <th>{totalPoints(member) ?? '–'}</th>}</Fragment>)}</tr></tfoot>
+              <tfoot><tr><th title="Celkem">Σ</th><th>{visible.reduce((sum, hole) => sum + hole.par, 0)}</th>{members.map((member, index) => <Fragment key={member.id}><th className={`player-group-${index} player-start`}>{totalStrokes(member)}</th>{game.scoring === 'stableford' && <th className={`player-group-${index}`}>{totalPoints(member) ?? '–'}</th>}</Fragment>)}</tr></tfoot>
             </table>
           </div>
         </div>}
