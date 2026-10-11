@@ -31,7 +31,7 @@ export default function GameDetail() {
   const [lastRefresh, setLastRefresh] = useState('');
   const [mobileHole, setMobileHole] = useState(1);
   const [selectedPlayerId, setSelectedPlayerId] = useState('');
-  const swipeStart = useRef<{ x: number; y: number } | null>(null);
+  const swipeStart = useRef<{ x: number; y: number; time: number } | null>(null);
   const [desktopPlayerId, setDesktopPlayerId] = useState('');
   const [mobileView, setMobileView] = useState<'hole' | 'card'>('hole');
   const [showEarlyFinish, setShowEarlyFinish] = useState(false);
@@ -148,6 +148,15 @@ export default function GameDetail() {
   const activeHole = visible.find(h => h.hole_number === mobileHole) || visible[0];
   const desktopMember = members.find(member => member.id === desktopPlayerId) || myMember;
   const selectedMember = members.find(member => member.id === selectedPlayerId) || myMember || members[0];
+  // Stejne jemne barvy jako sloupce hracu ve spolecne scorekarte.
+  const playerColors = [
+    { light: '#e4f2e8', strong: '#cce5d3', text: '#174a32', border: '#9dc6aa' },
+    { light: '#e7efff', strong: '#d0dffc', text: '#173d68', border: '#a7bee8' },
+    { light: '#fff1dc', strong: '#f9dfb6', text: '#76440b', border: '#e5c48f' },
+    { light: '#f1e8f8', strong: '#e4d5f1', text: '#503070', border: '#cbb3df' },
+  ];
+  const selectedIndex = Math.max(0, members.findIndex(member => member.id === selectedMember?.id));
+  const selectedColors = playerColors[selectedIndex % playerColors.length];
   const activeScore = selectedMember && activeHole ? scores[selectedMember.id]?.[activeHole.hole_number] : undefined;
   const completedCount = selectedMember ? visible.filter(h => Boolean(scores[selectedMember.id]?.[h.hole_number])).length : 0;
   const ownCompletedCount = myMember ? visible.filter(h => Boolean(scores[myMember.id]?.[h.hole_number])).length : 0;
@@ -156,15 +165,21 @@ export default function GameDetail() {
     const index = members.findIndex(member => member.id === selectedMember.id);
     setSelectedPlayerId(members[(index + direction + members.length) % members.length].id);
   }
-  function onScoreTouchStart(e: TouchEvent<HTMLDivElement>) {
-    swipeStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  function onScoreTouchStart(e: TouchEvent<HTMLElement>) {
+    if (e.touches.length !== 1) { swipeStart.current = null; return; }
+    swipeStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY, time: Date.now() };
   }
-  function onScoreTouchEnd(e: TouchEvent<HTMLDivElement>) {
-    if (!swipeStart.current) return;
-    const dx = e.changedTouches[0].clientX - swipeStart.current.x;
-    const dy = e.changedTouches[0].clientY - swipeStart.current.y;
+
+  function onScoreTouchEnd(e: TouchEvent<HTMLElement>) {
+    const start = swipeStart.current;
     swipeStart.current = null;
-    if (Math.abs(dx) > 65 && Math.abs(dx) > Math.abs(dy) * 1.4) switchPlayer(dx < 0 ? 1 : -1);
+    if (!start || e.changedTouches.length !== 1) return;
+    const dx = e.changedTouches[0].clientX - start.x;
+    const dy = e.changedTouches[0].clientY - start.y;
+    // Horizontalni gesto; svisle posouvani stranky zustava nedotcene.
+    if (Math.abs(dx) >= 40 && Math.abs(dx) > Math.abs(dy) * 1.2 && Date.now() - start.time < 1500) {
+      switchPlayer(dx < 0 ? 1 : -1);
+    }
   }
 
   function playingHandicap(member: Member): number | null {
@@ -336,6 +351,7 @@ export default function GameDetail() {
         .golf-mobile .mobile-pill strong { color: #174a32; }
         .golf-mobile .mobile-nav-next { background: #174a32 !important; color: #fff !important; border-color: #174a32 !important; }
         .golf-mobile .mobile-nav-next:disabled { opacity: .45; }
+        .golf-mobile .swipe-player-area { touch-action: pan-y; overscroll-behavior-x: contain; }
         .golf-mobile .flight-player-strip { display: flex; gap: 7px; overflow-x: auto; padding: 3px 0 10px; scrollbar-width: thin; }
         .golf-mobile .flight-player-strip button { flex: 1 0 0; min-width: 64px; border: 1px solid #d0dfd3; border-radius: 12px; background: #e9f1ea; color: #234b35; padding: 9px 4px; font-size: 12px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .golf-mobile .flight-player-strip button.selected { background: #174a32; color: white; border-color: #174a32; }
@@ -482,9 +498,9 @@ export default function GameDetail() {
           <button type="button" className={mobileView === 'card' ? 'selected' : ''} aria-pressed={mobileView === 'card'} onClick={() => setMobileView('card')}>Celá scorekarta</button>
         </div>
         {mobileView === 'hole' ? <>
-        <div className="mobile-card" onTouchStart={onScoreTouchStart} onTouchEnd={onScoreTouchEnd}>
+        <div className="mobile-card swipe-player-area" onTouchStartCapture={onScoreTouchStart} onTouchEndCapture={onScoreTouchEnd} onTouchCancel={() => { swipeStart.current = null; }} style={{ background: selectedColors.light, border: `2px solid ${selectedColors.border}`, transition: 'background-color 180ms ease, border-color 180ms ease' }}>
           <div className="flight-player-strip" role="group" aria-label="Vybrat hráče pro zápis skóre">
-            {members.map(member => <button key={member.id} type="button" className={`${selectedMember?.id === member.id ? 'selected' : ''} ${member.finished_at ? 'finished' : ''}`} disabled={busy} aria-pressed={selectedMember?.id === member.id} onClick={() => setSelectedPlayerId(member.id)} title={member.finished_at ? 'Hráč dokončil hru – skóre nelze měnit' : member.nickname}>
+            {members.map((member, index) => <button key={member.id} type="button" className={`${selectedMember?.id === member.id ? 'selected' : ''} ${member.finished_at ? 'finished' : ''}`} style={{ background: selectedMember?.id === member.id ? playerColors[index % playerColors.length].strong : playerColors[index % playerColors.length].light, color: playerColors[index % playerColors.length].text, borderColor: selectedMember?.id === member.id ? playerColors[index % playerColors.length].text : playerColors[index % playerColors.length].border }} disabled={busy} aria-pressed={selectedMember?.id === member.id} onClick={() => setSelectedPlayerId(member.id)} title={member.finished_at ? 'Hráč dokončil hru – skóre nelze měnit' : member.nickname}>
               {member.nickname}{member.player_id === userId ? ' (já)' : ''}{member.finished_at ? ' ✓' : ''}
             </button>)}
           </div>
