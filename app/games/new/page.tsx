@@ -353,7 +353,12 @@ export default function NewGame() {
           {error && <p className="error" role="alert">{error}</p>}
           <button className="btn secondary" disabled={busy}>{busy ? 'Ukládám…' : 'Vytvořit hru'}</button>
         </form>}
-        <Link href="/games">← Zpět na moje hry</Link>
+        <div style={{ marginTop: 22, marginBottom: 12 }}>
+      <Link href="/games" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 9, minHeight: 44, padding: '10px 18px', borderRadius: 999, backgroundColor: '#e7f1ea', color: '#164b35', fontSize: 14, fontWeight: 650, textDecoration: 'none', lineHeight: 1.2, border: '1px solid #d5e6da', boxSizing: 'border-box' }}>
+        <span aria-hidden="true" style={{ fontSize: 19, lineHeight: 1 }}>←</span>
+        <span>Zpět na moje hry</span>
+      </Link>
+    </div>
         <style>{`
           /* Výběrové nabídky na PC: světlý systémový seznam i při tmavém motivu webu. */
           .panel .field select {
