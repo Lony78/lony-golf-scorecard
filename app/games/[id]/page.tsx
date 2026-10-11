@@ -8,7 +8,7 @@ import { supabase } from '../../../lib/supabase';
 type Game = { id: string; name: string; organizer_id: string; play_date: string; status: string; scoring: string; holes_count: number; tee_id: string };
 type Hole = { hole_number: number; par: number; stroke_index: number; length_m: number | null };
 type Score = { game_player_id: string; hole_number: number; strokes: number | null; picked_up: boolean };
-type Member = { id: string; player_id: string; handicap_snapshot: number | null; flight_number: number; finished_at: string | null; nickname: string };
+type Member = { id: string; player_id: string; handicap_snapshot: number | null; flight_number: number; finished_at: string | null; finish_reason: string | null; finish_note: string | null; nickname: string };
 type Rating = { course_rating: number | null; slope_rating: number | null };
 
 export default function GameDetail() {
@@ -29,6 +29,9 @@ export default function GameDetail() {
   const [lastRefresh, setLastRefresh] = useState('');
   const [mobileHole, setMobileHole] = useState(1);
   const [mobileView, setMobileView] = useState<'hole' | 'card'>('hole');
+  const [showEarlyFinish, setShowEarlyFinish] = useState(false);
+  const [earlyReason, setEarlyReason] = useState('Zranění');
+  const [earlyNote, setEarlyNote] = useState('');
 
   const load = useCallback(async () => {
     const client = supabase();
@@ -45,7 +48,7 @@ export default function GameDetail() {
     const [h, t, p] = await Promise.all([
       client.from('holes').select('hole_number,par,stroke_index,length_m').eq('tee_id', g.tee_id).order('hole_number'),
       client.from('course_tees').select('course_rating,slope_rating').eq('id', g.tee_id).single(),
-      client.from('game_players').select('id,player_id,handicap_snapshot,flight_number,finished_at').eq('game_id', id).order('flight_number'),
+      client.from('game_players').select('id,player_id,handicap_snapshot,flight_number,finished_at,finish_reason,finish_note').eq('game_id', id).order('flight_number'),
     ]);
     if (h.error) throw h.error;
     if (t.error) throw t.error;
@@ -84,7 +87,7 @@ export default function GameDetail() {
     try {
       const client = supabase();
       const { data: participants, error: pe } = await client.from('game_players')
-        .select('id,player_id,finished_at').eq('game_id', id);
+        .select('id,player_id,finished_at,finish_reason,finish_note').eq('game_id', id);
       if (pe) throw pe;
       const ids = (participants || []).map(player => player.id);
       if (ids.length === 0) return;
@@ -100,7 +103,7 @@ export default function GameDetail() {
       setScores(grouped);
       setMembers(prev => prev.map(member => {
         const latest = (participants || []).find(player => player.id === member.id);
-        return latest ? { ...member, finished_at: latest.finished_at } : member;
+        return latest ? { ...member, finished_at: latest.finished_at, finish_reason: latest.finish_reason, finish_note: latest.finish_note } : member;
       }));
       setLastRefresh(new Date().toLocaleTimeString('cs-CZ'));
     } catch (e) {
@@ -173,6 +176,61 @@ export default function GameDetail() {
       setNotice('Skóre uloženo.');
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { savingRef.current = false; setBusy(false); }
+  }
+
+  const earlyReasons = ['Zranění', 'Diskvalifikace', 'Odstoupení ze hry', 'Nepříznivé počasí', 'Jiný důvod'];
+  function finishLabel(member: Member) {
+    return member.finish_reason ? `Předčasně ukončeno – ${member.finish_reason}` : 'Dokončeno';
+  }
+  function rankingMembers() {
+    return members.filter(member => !member.finish_reason);
+  }
+  async function finishEarly() {
+    if (!myMember || myMember.finished_at || busy || !earlyReason) return;
+    if (earlyReason === 'Jiný důvod' && !earlyNote.trim()) {
+      setError('U jiného důvodu prosím vyplň poznámku.');
+      return;
+    }
+    if (!window.confirm('Opravdu předčasně ukončit svou účast? Skóre zůstane uložené, ale nebudeš v pořadí. Tento krok nelze vrátit.')) return;
+    savingRef.current = true;
+    setBusy(true);
+    setError('');
+    try {
+      const finishedAt = new Date().toISOString();
+      const { data, error: e } = await supabase().from('game_players')
+        .update({ finished_at: finishedAt, finish_reason: earlyReason, finish_note: earlyNote.trim() || null })
+        .eq('id', myMember.id).eq('player_id', userId).is('finished_at', null)
+        .select('id,finished_at,finish_reason,finish_note');
+      if (e) throw e;
+      if (!data?.length) throw new Error('Účast již byla ukončena. Obnov stránku.');
+      setMembers(prev => prev.map(member => member.id === myMember.id ? { ...member, finished_at: finishedAt, finish_reason: earlyReason, finish_note: earlyNote.trim() || null } : member));
+      router.replace('/history');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      savingRef.current = false;
+      setBusy(false);
+    }
+  }
+  function earlyFinishControls() {
+    if (!myMember || myMember.finished_at) return null;
+    return <div style={{ marginTop: 16, borderTop: '1px solid #d8e3da', paddingTop: 14 }}>
+      {!showEarlyFinish ? <button type="button" className="btn secondary" disabled={busy} onClick={() => setShowEarlyFinish(true)}>Předčasně ukončit hru</button> :
+      <div style={{ display: 'grid', gap: 10 }}>
+        <strong>Předčasné ukončení účasti</strong>
+        <label style={{ display: 'grid', gap: 5 }}>Důvod
+          <select value={earlyReason} onChange={e => setEarlyReason(e.target.value)} disabled={busy} style={{ width: '100%', padding: 10, borderRadius: 9, background: '#fff', color: '#123d2b' }}>
+            {earlyReasons.map(reason => <option key={reason} value={reason}>{reason}</option>)}
+          </select>
+        </label>
+        <label style={{ display: 'grid', gap: 5 }}>Poznámka {earlyReason === 'Jiný důvod' ? '(povinná)' : '(nepovinná)'}
+          <textarea value={earlyNote} onChange={e => setEarlyNote(e.target.value)} maxLength={500} rows={2} disabled={busy} style={{ width: '100%', boxSizing: 'border-box', padding: 10, borderRadius: 9, background: '#fff', color: '#123d2b' }} />
+        </label>
+        <p style={{ margin: 0, fontSize: 12 }}>Dosavadní skóre zůstane uložené. Ostatní hráči pokračují dál.</p>
+        <button type="button" className="btn secondary" disabled={busy || (earlyReason === 'Jiný důvod' && !earlyNote.trim())} onClick={() => void finishEarly()}>Potvrdit předčasné ukončení</button>
+        <button type="button" className="btn secondary" disabled={busy} onClick={() => { setShowEarlyFinish(false); setError(''); }}>Zrušit</button>
+      </div>}
+    </div>;
   }
 
   async function finish() {
@@ -282,7 +340,7 @@ export default function GameDetail() {
           style={{ display: 'block', width: '100%', marginBottom: 8, textAlign: 'left', cursor: 'default' }}>
           {member.nickname}{member.player_id === userId ? ' (já)' : ''} · HCP {member.handicap_snapshot ?? '–'}
           {playingHandicap(member) !== null ? ` · Herní HCP ${playingHandicap(member)}` : ''}
-          {member.finished_at ? ' · Dokončeno' : ''}
+          {member.finished_at ? ` · ${finishLabel(member)}` : ''}
         </div>)}
         <p className="muted">Výsledky se automaticky aktualizují každých 5 sekund, když je stránka otevřená. {lastRefresh && `Poslední aktualizace: ${lastRefresh}`}</p>
         <button type="button" className="btn secondary" onClick={() => void refreshResults()}>Aktualizovat výsledky</button>
@@ -344,14 +402,16 @@ export default function GameDetail() {
       </div>}
       {myMember && <div className="panel golf-desktop">
         <h2>Dokončení hry</h2>
-        {myMember.finished_at ? <p className="success">Hru jsi dokončil.</p> :
+        {myMember.finished_at ? <p className="success">{finishLabel(myMember)}{myMember.finish_note ? ` · ${myMember.finish_note}` : ''}</p> :
           <button className="btn secondary" disabled={busy || !complete(myMember)} onClick={finish}>Potvrdit dokončení hry</button>}
+        {earlyFinishControls()}
       </div>}
       <div className="panel golf-desktop">
         <h2>Průběžné výsledky</h2>
+        {members.some(m => m.finish_reason) && <p className="muted">Předčasně ukončení hráči nejsou v pořadí: {members.filter(m => m.finish_reason).map(m => `${m.nickname} (${m.finish_reason})`).join(', ')}</p>}
         <div className="score-scroll"><table className="score-table">
           <thead><tr><th>Hráč</th><th>HCP</th><th>Rány</th>{game.scoring === 'stableford' && <th>Body</th>}</tr></thead>
-          <tbody>{[...members].sort((a, b) => game.scoring === 'stableford' ? (totalPoints(b) ?? -1) - (totalPoints(a) ?? -1) : totalStrokes(a) - totalStrokes(b)).map(member =>
+          <tbody>{rankingMembers().sort((a, b) => game.scoring === 'stableford' ? (totalPoints(b) ?? -1) - (totalPoints(a) ?? -1) : totalStrokes(a) - totalStrokes(b)).map(member =>
             <tr key={member.id}><td>{member.nickname}</td><td>{member.handicap_snapshot ?? '–'}</td><td>{totalStrokes(member)}</td>
               {game.scoring === 'stableford' && <td>{totalPoints(member) ?? '–'}</td>}</tr>)}</tbody>
         </table></div>
@@ -425,11 +485,12 @@ export default function GameDetail() {
         </div>}
         <div className="mobile-card">
           <h3 style={{ marginTop: 0 }}>Průběžné výsledky</h3>
-          <table className="mobile-rows"><tbody>{[...members].sort((a,b) => game.scoring === 'stableford' ? (totalPoints(b) ?? -1) - (totalPoints(a) ?? -1) : totalStrokes(a) - totalStrokes(b)).map((member,i) => <tr key={member.id}><td>{i+1}. {member.nickname}{member.player_id === userId ? ' (já)' : ''}</td><td>{game.scoring === 'stableford' ? `${totalPoints(member) ?? '–'} b` : `${totalStrokes(member)} ran`}</td></tr>)}</tbody></table>
+          {members.some(m => m.finish_reason) && <p className="mobile-sub">Mimo pořadí: {members.filter(m => m.finish_reason).map(m => `${m.nickname} (${m.finish_reason})`).join(', ')}</p>}
+          <table className="mobile-rows"><tbody>{rankingMembers().sort((a,b) => game.scoring === 'stableford' ? (totalPoints(b) ?? -1) - (totalPoints(a) ?? -1) : totalStrokes(a) - totalStrokes(b)).map((member,i) => <tr key={member.id}><td>{i+1}. {member.nickname}{member.player_id === userId ? ' (já)' : ''}</td><td>{game.scoring === 'stableford' ? `${totalPoints(member) ?? '–'} b` : `${totalStrokes(member)} ran`}</td></tr>)}</tbody></table>
           <p className="mobile-sub">Aktualizace každých 5 sekund. {lastRefresh && `Naposledy ${lastRefresh}`}</p>
           <button type="button" className="mobile-action" onClick={() => void refreshResults()}>Aktualizovat výsledky</button>
         </div>
-        {myMember && <div className="mobile-card"><h3 style={{ marginTop: 0 }}>Dokončení hry</h3>{myMember.finished_at ? <p>Hra dokončena.</p> : <><p className="mobile-sub">Zapsáno {completedCount} z {expected} jamek. Hru lze dokončit až po vyplnění všech.</p><button type="button" className="mobile-action" disabled={busy || !complete(myMember)} onClick={() => void finish()}>Potvrdit dokončení hry</button></>}</div>}
+        {myMember && <div className="mobile-card"><h3 style={{ marginTop: 0 }}>Dokončení hry</h3>{myMember.finished_at ? <p>{finishLabel(myMember)}{myMember.finish_note ? ` · ${myMember.finish_note}` : ''}</p> : <><p className="mobile-sub">Zapsáno {completedCount} z {expected} jamek. Hru lze dokončit až po vyplnění všech.</p><button type="button" className="mobile-action" disabled={busy || !complete(myMember)} onClick={() => void finish()}>Potvrdit dokončení hry</button>{earlyFinishControls()}</>}</div>}
       </section>
       {notice && <p className="success" role="status">{notice}</p>}
       {error && <p className="error" role="alert">{error}</p>}
