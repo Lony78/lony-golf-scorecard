@@ -24,7 +24,6 @@ export default function GameDetail() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
-  const [activePlayer, setActivePlayer] = useState('');
   const savingRef = useRef(false);
   const refreshingRef = useRef(false);
   const [lastRefresh, setLastRefresh] = useState('');
@@ -63,7 +62,6 @@ export default function GameDetail() {
     const names = new Map((profiles.data || []).map(profile => [profile.id, profile.nickname]));
     const playerList = participants.map(player => ({ ...player, nickname: names.get(player.player_id) || 'Hráč' }));
     setMembers(playerList);
-    setActivePlayer(current => playerList.some(player => player.id === current) ? current : (playerList.find(player => player.player_id === user.id)?.id || ''));
     const grouped: Record<string, Record<number, Score>> = {};
     for (const score of (scoreResult.data || []) as Score[]) {
       if (!grouped[score.game_player_id]) grouped[score.game_player_id] = {};
@@ -121,7 +119,6 @@ export default function GameDetail() {
   const expected = game?.holes_count || 18;
   const visible = holes.filter(h => h.hole_number <= expected);
   const coursePar = holes.reduce((sum, h) => sum + h.par, 0);
-  const selected = members.find(member => member.id === activePlayer);
   const myMember = members.find(member => member.player_id === userId);
 
   function playingHandicap(member: Member): number | null {
@@ -194,14 +191,13 @@ export default function GameDetail() {
       <p>{game.play_date} · {expected} jamek · {game.scoring === 'stableford' ? 'Stableford' : 'Na rány'}</p>
       <div className="panel">
         <h2>Společná hra – flight</h2>
-        <p className="muted">Vyber hráče a zobraz jeho scorekartu. Každý hráč zapisuje pouze své vlastní výsledky.</p>
-        {members.map(member => <button key={member.id} type="button" className="btn secondary"
-          style={{ display: 'block', width: '100%', marginBottom: 8, textAlign: 'left', opacity: selected?.id === member.id ? 1 : 0.75 }}
-          onClick={() => setActivePlayer(member.id)}>
+        <p className="muted">Hráči ve flightu. Každý zapisuje pouze své vlastní výsledky ve společné scorekartě.</p>
+        {members.map(member => <div key={member.id} className="btn secondary"
+          style={{ display: 'block', width: '100%', marginBottom: 8, textAlign: 'left', cursor: 'default' }}>
           {member.nickname}{member.player_id === userId ? ' (já)' : ''} · HCP {member.handicap_snapshot ?? '–'}
           {playingHandicap(member) !== null ? ` · Herní HCP ${playingHandicap(member)}` : ''}
           {member.finished_at ? ' · Dokončeno' : ''}
-        </button>)}
+        </div>)}
         <p className="muted">Výsledky se automaticky aktualizují každých 5 sekund, když je stránka otevřená. {lastRefresh && `Poslední aktualizace: ${lastRefresh}`}</p>
         <button type="button" className="btn secondary" onClick={() => void refreshResults()}>Aktualizovat výsledky</button>
       </div>
@@ -253,30 +249,10 @@ export default function GameDetail() {
         </div>
         {game.scoring === 'stableford' && expected !== 18 && <p className="muted">Stableford body jsou v této verzi dostupné pouze pro 18 jamek.</p>}
       </div>
-      {selected && <div className="panel">
-        <h2>Scorekarta: {selected.nickname}</h2>
-        <p className="muted">HCP při založení hry: {selected.handicap_snapshot ?? '–'}{playingHandicap(selected) !== null ? ` · Herní HCP: ${playingHandicap(selected)}` : ''}</p>
-        {visible.length !== expected && <p className="error">Hřiště nemá všech {expected} jamek s PAR a SI. Doplň ověřená data před zapisováním.</p>}
-        <div className="score-scroll"><table className="score-table">
-          <thead><tr><th>Jamka</th><th>PAR</th><th>SI</th><th>Rány</th>{game.scoring === 'stableford' && <th>Body</th>}</tr></thead>
-          <tbody>{visible.map(h => {
-            const score = scores[selected.id]?.[h.hole_number];
-            const editable = selected.player_id === userId && !selected.finished_at && visible.length === expected;
-            return <tr key={h.hole_number}>
-              <td>{h.hole_number}</td><td>{h.par}</td><td>{h.stroke_index}</td>
-              <td>{editable ? <select aria-label={`Rány ${selected.nickname}, jamka ${h.hole_number}`} disabled={busy}
-                value={score?.picked_up ? 'X' : score?.strokes ?? ''} onChange={e => save(h.hole_number, e.target.value)}>
-                <option value="">–</option>{Array.from({ length: 30 }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1}</option>)}<option value="X">X</option>
-              </select> : score?.picked_up ? 'X' : score?.strokes ?? '–'}</td>
-              {game.scoring === 'stableford' && <td>{points(selected, h) ?? '–'}</td>}
-            </tr>;
-          })}</tbody>
-          <tfoot><tr><th>Celkem</th><th>{visible.reduce((sum, h) => sum + h.par, 0)}</th><th>–</th><th>{totalStrokes(selected)}</th>
-            {game.scoring === 'stableford' && <th>{totalPoints(selected) ?? '–'}</th>}</tr></tfoot>
-        </table></div>
-        {game.scoring === 'stableford' && (playingHandicap(selected) === null || expected !== 18) && <p className="muted">Stableford body vyžadují úplné údaje hřiště a výpočet pro 18 jamek.</p>}
-        {selected.player_id === userId && (selected.finished_at ? <p className="success">Hru jsi dokončil.</p> :
-          <button className="btn secondary" disabled={busy || !complete(selected)} onClick={finish}>Potvrdit dokončení hry</button>)}
+      {myMember && <div className="panel">
+        <h2>Dokončení hry</h2>
+        {myMember.finished_at ? <p className="success">Hru jsi dokončil.</p> :
+          <button className="btn secondary" disabled={busy || !complete(myMember)} onClick={finish}>Potvrdit dokončení hry</button>}
       </div>}
       <div className="panel">
         <h2>Průběžné výsledky</h2>
