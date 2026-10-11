@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabase';
@@ -25,6 +25,9 @@ export default function GameDetail() {
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
   const [activePlayer, setActivePlayer] = useState('');
+  const savingRef = useRef(false);
+  const refreshingRef = useRef(false);
+  const [lastRefresh, setLastRefresh] = useState('');
 
   const load = useCallback(async () => {
     const client = supabase();
@@ -67,11 +70,53 @@ export default function GameDetail() {
       grouped[score.game_player_id][score.hole_number] = score;
     }
     setScores(grouped);
+    setLastRefresh(new Date().toLocaleTimeString('cs-CZ'));
     setHoles((h.data || []) as Hole[]);
     setRating(t.data as Rating);
   }, [id, router]);
 
   useEffect(() => { load().catch(e => setError(e instanceof Error ? e.message : String(e))); }, [load]);
+
+  // Načítáme pouze průběžná skóre a stav dokončení; ostatní formulářová data se nemění.
+  const refreshResults = useCallback(async () => {
+    if (savingRef.current || refreshingRef.current) return;
+    refreshingRef.current = true;
+    try {
+      const client = supabase();
+      const { data: participants, error: pe } = await client.from('game_players')
+        .select('id,player_id,finished_at').eq('game_id', id);
+      if (pe) throw pe;
+      const ids = (participants || []).map(player => player.id);
+      if (ids.length === 0) return;
+      const { data, error: se } = await client.from('scores')
+        .select('game_player_id,hole_number,strokes,picked_up').in('game_player_id', ids);
+      if (se) throw se;
+      if (savingRef.current) return; // Starší odpověď nesmí přepsat právě ukládané rány.
+      const grouped: Record<string, Record<number, Score>> = {};
+      for (const score of (data || []) as Score[]) {
+        if (!grouped[score.game_player_id]) grouped[score.game_player_id] = {};
+        grouped[score.game_player_id][score.hole_number] = score;
+      }
+      setScores(grouped);
+      setMembers(prev => prev.map(member => {
+        const latest = (participants || []).find(player => player.id === member.id);
+        return latest ? { ...member, finished_at: latest.finished_at } : member;
+      }));
+      setLastRefresh(new Date().toLocaleTimeString('cs-CZ'));
+    } catch (e) {
+      // Při dočasném výpadku zachováme poslední zobrazené výsledky.
+      console.error('Automatická aktualizace výsledků:', e);
+    } finally {
+      refreshingRef.current = false;
+    }
+  }, [id]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void refreshResults();
+    }, 10000);
+    return () => window.clearInterval(timer);
+  }, [refreshResults]);
 
   const expected = game?.holes_count || 18;
   const visible = holes.filter(h => h.hole_number <= expected);
@@ -111,6 +156,7 @@ export default function GameDetail() {
     if (!picked_up && strokes !== null && (!Number.isInteger(strokes) || strokes < 1 || strokes > 30)) {
       setError('Zadej 1 až 30 ran.'); return;
     }
+    savingRef.current = true;
     setBusy(true); setError(''); setNotice('');
     try {
       const client = supabase();
@@ -125,12 +171,13 @@ export default function GameDetail() {
       }
       setNotice('Skóre uloženo.');
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
-    finally { setBusy(false); }
+    finally { savingRef.current = false; setBusy(false); }
   }
 
   async function finish() {
     if (!myMember || myMember.finished_at || !complete(myMember) || busy) return;
     if (!window.confirm('Opravdu potvrdit dokončení své hry? Další úpravy skóre budou zablokované.')) return;
+    savingRef.current = true;
     setBusy(true); setError('');
     try {
       const { error: e } = await supabase().from('game_players').update({ finished_at: new Date().toISOString() }).eq('id', myMember.id).eq('player_id', userId);
@@ -138,7 +185,7 @@ export default function GameDetail() {
       setMembers(prev => prev.map(member => member.id === myMember.id ? { ...member, finished_at: new Date().toISOString() } : member));
       setNotice('Tvoje hra je dokončena.');
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
-    finally { setBusy(false); }
+    finally { savingRef.current = false; setBusy(false); }
   }
 
   return <main>
@@ -156,7 +203,8 @@ export default function GameDetail() {
           {playingHandicap(member) !== null ? ` · Herní HCP ${playingHandicap(member)}` : ''}
           {member.finished_at ? ' · Dokončeno' : ''}
         </button>)}
-        <button type="button" className="btn secondary" onClick={() => load().catch(e => setError(String(e)))}>Aktualizovat výsledky</button>
+        <p className="muted">Výsledky se automaticky aktualizují každých 10 sekund, když je stránka otevřená. {lastRefresh && `Poslední aktualizace: ${lastRefresh}`}</p>
+        <button type="button" className="btn secondary" onClick={() => void refreshResults()}>Aktualizovat výsledky</button>
       </div>
       {selected && <div className="panel">
         <h2>Scorekarta: {selected.nickname}</h2>
@@ -191,7 +239,7 @@ export default function GameDetail() {
             <tr key={member.id}><td>{member.nickname}</td><td>{member.handicap_snapshot ?? '–'}</td><td>{totalStrokes(member)}</td>
               {game.scoring === 'stableford' && <td>{totalPoints(member) ?? '–'}</td>}</tr>)}</tbody>
         </table></div>
-        <p className="muted">Pořadí je průběžné. Nula ran může znamenat, že hráč ještě nezapsal výsledek. Pro aktualizaci ostatních hráčů použij tlačítko výše.</p>
+        <p className="muted">Pořadí je průběžné. Nula ran může znamenat, že hráč ještě nezapsal výsledek. Výsledky ostatních hráčů se načítají automaticky každých 10 sekund.</p>
       </div>
       {notice && <p className="success" role="status">{notice}</p>}
       {error && <p className="error" role="alert">{error}</p>}
