@@ -106,6 +106,7 @@ export default function NewGame() {
         for (let start = 0; ; start += pageSize) {
           const { data, error } = await supabase().from('profiles')
             .select('id,nickname,handicap_index,preferred_tee_color')
+            .eq('is_archived', false)
             .order('nickname').order('id')
             .range(start, start + pageSize - 1);
           if (error) throw error;
@@ -204,6 +205,21 @@ export default function NewGame() {
         throw new Error('Aktivní hru už má: ' + busySelected.map(player => player.nickname).join(', ') + '. Odeber obsazené hráče z flightu.');
       }
 
+
+       // Archivované spoluhráče nelze přidat ani v případě, že byl formulář otevřen před archivací.
+       if (selected.length > 0) {
+         const { data: eligiblePlayers, error: eligibleError } = await supabase()
+           .from('profiles')
+           .select('id')
+           .in('id', selected.map(player => player.id))
+           .eq('is_archived', false);
+         if (eligibleError) throw new Error('Nepodařilo se ověřit stav spoluhráčů. Zkus to znovu.');
+         const eligibleIds = new Set((eligiblePlayers || []).map(player => player.id));
+         const archivedSelected = selected.filter(player => !eligibleIds.has(player.id));
+         if (archivedSelected.length) {
+           throw new Error('Některý vybraný spoluhráč již nemá aktivní účet: ' + archivedSelected.map(player => player.nickname).join(', ') + '. Odeber ho ze hry.');
+         }
+       }
 
        // Databázový profil je primární zdroj HCP.
        const { data: profile, error: profileError } = await supabase()
