@@ -19,6 +19,8 @@ export default function GameDetail() {
   const [game, setGame] = useState<Game | null>(null);
   const [holes, setHoles] = useState<Hole[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
+  const [playerAvatars, setPlayerAvatars] = useState<Record<string, string>>({});
+  const [failedAvatars, setFailedAvatars] = useState<Record<string, boolean>>({});
   const [scores, setScores] = useState<Record<string, Record<number, Score>>>({});
   const [userId, setUserId] = useState('');
   const [ratings, setRatings] = useState<Record<string, Rating>>({});
@@ -77,6 +79,20 @@ export default function GameDetail() {
     const names = new Map((profiles.data || []).map(profile => [profile.id, profile.nickname]));
     const playerList = participants.map(player => ({ ...player, nickname: names.get(player.player_id) || 'Hráč' }));
     setMembers(playerList);
+    // Profilové fotografie jsou uložené v Supabase Storage (avatars/{userId}/avatar.ext).
+    // Není nutná změna databázového schématu. Pokud výpis není povolen, použijeme iniciálu.
+    const avatarEntries = await Promise.all(playerIds.map(async playerId => {
+      if (playerId === user.id && user.user_metadata?.avatar_url) {
+        return [playerId, String(user.user_metadata.avatar_url)] as const;
+      }
+      const { data: files, error: listError } = await client.storage.from('avatars').list(playerId, { limit: 20 });
+      if (listError) return [playerId, ''] as const;
+      const avatarFile = (files || []).find(file => /^avatar\.(jpg|jpeg|png|webp)$/i.test(file.name));
+      if (!avatarFile) return [playerId, ''] as const;
+      const { data: publicData } = client.storage.from('avatars').getPublicUrl(`${playerId}/${avatarFile.name}`);
+      return [playerId, publicData.publicUrl] as const;
+    }));
+    setPlayerAvatars(Object.fromEntries(avatarEntries));
     const grouped: Record<string, Record<number, Score>> = {};
     for (const score of (scoreResult.data || []) as Score[]) {
       if (!grouped[score.game_player_id]) grouped[score.game_player_id] = {};
@@ -352,7 +368,12 @@ export default function GameDetail() {
           {activeHole && <>
             <p className="mobile-sub">{cardMember ? teeName(cardMember) : ''} · PAR {cardMember ? memberHole(cardMember, activeHole.hole_number)?.par ?? activeHole.par : activeHole.par} · SI {cardMember ? memberHole(cardMember, activeHole.hole_number)?.stroke_index ?? activeHole.stroke_index : activeHole.stroke_index}{(cardMember ? memberHole(cardMember, activeHole.hole_number)?.length_m : activeHole.length_m) != null ? ` · ${cardMember ? memberHole(cardMember, activeHole.hole_number)?.length_m : activeHole.length_m} m` : ''}</p>
             <div className="mobile-nav" style={{ marginTop: 7 }}>
-              <div><strong>{cardMember?.nickname || 'Moje skóre'}</strong><div className="mobile-sub">Herní HCP {cardMember ? playingHandicap(cardMember) ?? '–' : '–'}</div></div>
+              <div className="mobile-player-identity">
+                {playerAvatars[cardMember.player_id] && !failedAvatars[cardMember.player_id] ?
+                  <img className="mobile-player-avatar" src={playerAvatars[cardMember.player_id]} alt={`Avatar hráče ${cardMember.nickname}`} onError={() => setFailedAvatars(prev => ({ ...prev, [cardMember.player_id]: true }))} /> :
+                  <span className="mobile-player-avatar mobile-player-avatar-fallback" aria-hidden="true">{cardMember.nickname.trim().charAt(0).toUpperCase() || '⛳'}</span>}
+                <div className="mobile-player-details"><strong>{cardMember.nickname || 'Moje skóre'}</strong><div className="mobile-sub">Herní HCP {playingHandicap(cardMember) ?? '–'}</div></div>
+              </div>
               <div style={{ textAlign: 'right' }}><strong>{cardMember ? totalPoints(cardMember) ?? '–' : '–'}</strong><div className="mobile-sub">Celkem bodů</div></div>
             </div>
             <div className="mobile-stepper">
@@ -411,6 +432,11 @@ export default function GameDetail() {
         .golf-mobile .mobile-minor-actions button { flex: 0 1 auto; min-height: 34px; padding: 6px 10px; font-size: 11px; font-weight: 500; background: #f5f8f5; color: #547163; border: 1px solid #d8e3da; border-radius: 8px; }
         .golf-mobile .mobile-minor-actions button:disabled { opacity: .4; }
         .golf-mobile .mobile-card { padding: 11px 12px; margin: 7px 0; }
+        .golf-mobile .mobile-player-identity { display: flex; align-items: center; gap: 11px; min-width: 0; flex: 1; }
+        .golf-mobile .mobile-player-avatar { width: 56px; height: 56px; flex: 0 0 56px; border-radius: 50%; object-fit: cover; border: 2px solid #b9cfbf; background: #e6f1df; }
+        .golf-mobile .mobile-player-avatar-fallback { display: grid; place-items: center; box-sizing: border-box; font-size: 24px; font-weight: 800; color: #174a32; }
+        .golf-mobile .mobile-player-details { min-width: 0; overflow-wrap: anywhere; }
+        .golf-mobile .mobile-player-details strong { font-size: 17px; }
         .golf-mobile .mobile-stepper { padding: 14px 0 10px; gap: 22px; }
         .golf-mobile .mobile-stepper button { height: 64px; width: 64px; border-radius: 15px; font-size: 36px; box-shadow: 0 4px 10px rgba(16,62,44,.15); touch-action: manipulation; }
         .golf-mobile .mobile-number { font-size: 54px; line-height: 1.05; min-width: 70px; }
