@@ -28,6 +28,7 @@ export default function GameDetail() {
   const refreshingRef = useRef(false);
   const [lastRefresh, setLastRefresh] = useState('');
   const [mobileHole, setMobileHole] = useState(1);
+  const [mobileView, setMobileView] = useState<'hole' | 'card'>('hole');
 
   const load = useCallback(async () => {
     const client = supabase();
@@ -219,6 +220,22 @@ export default function GameDetail() {
         .golf-mobile .mobile-card:first-child .mobile-nav button { min-height: 42px; }
         .golf-mobile .mobile-holes button.active { background: #103e2c; color: #fff; }
         .golf-mobile .mobile-holes button.recorded:not(.active) { background: #dcefe0; }
+        .golf-mobile .mobile-view-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 8px 0; }
+        .golf-mobile .mobile-view-switch button { padding: 10px 5px; border: 1px solid #c8d8ce; border-radius: 10px; background: #f1f6f2; color: #123d2b; font-weight: 700; font-size: 13px; }
+        .golf-mobile .mobile-view-switch button.selected { background: #103e2c; color: #fff; }
+        .golf-mobile .mobile-minor-actions { display: flex; justify-content: center; gap: 8px; margin-top: 8px; }
+        .golf-mobile .mobile-minor-actions button { flex: 0 1 auto; min-height: 34px; padding: 6px 10px; font-size: 11px; font-weight: 500; background: #f5f8f5; color: #547163; border: 1px solid #d8e3da; border-radius: 8px; }
+        .golf-mobile .mobile-minor-actions button:disabled { opacity: .4; }
+        .golf-mobile .mobile-card { padding: 11px 12px; margin: 7px 0; }
+        .golf-mobile .mobile-stepper { padding: 3px 0; }
+        .golf-mobile .mobile-pill { padding: 5px; }
+        .golf-mobile .mobile-score-scroll { overflow-x: auto; width: 100%; -webkit-overflow-scrolling: touch; }
+        .golf-mobile .mobile-score-table { border-collapse: collapse; width: 100%; min-width: 390px; font-size: 11px; }
+        .golf-mobile .mobile-score-table th, .golf-mobile .mobile-score-table td { padding: 8px 4px; text-align: center; border-bottom: 1px solid #e1e9e3; white-space: nowrap; }
+        .golf-mobile .mobile-score-table thead th { background: #edf4ee; }
+        .golf-mobile .mobile-score-table .my-score { background: #e5f0e8; }
+        .golf-mobile .mobile-score-table select { max-width: 50px; padding: 5px 2px; font-size: 12px; }
+        .golf-mobile .mobile-score-table tfoot th { font-weight: 800; border-top: 2px solid #c8d8ce; }
       }
     `}</style>
     <p className="brand">LONY GOLF SCORECARD</p>
@@ -301,6 +318,11 @@ export default function GameDetail() {
         <p className="muted">Pořadí je průběžné. Nula ran může znamenat, že hráč ještě nezapsal výsledek. Výsledky ostatních hráčů se načítají automaticky každých 5 sekund.</p>
       </div>
       <section className="golf-mobile" aria-label="Mobilní scorekarta">
+        <div className="mobile-view-switch" role="group" aria-label="Zobrazení scorekarty">
+          <button type="button" className={mobileView === 'hole' ? 'selected' : ''} aria-pressed={mobileView === 'hole'} onClick={() => setMobileView('hole')}>Aktuální jamka</button>
+          <button type="button" className={mobileView === 'card' ? 'selected' : ''} aria-pressed={mobileView === 'card'} onClick={() => setMobileView('card')}>Celá scorekarta</button>
+        </div>
+        {mobileView === 'hole' ? <>
         <div className="mobile-card">
           <div className="mobile-nav">
             <strong>Jamka {activeHole?.hole_number ?? '–'} / {expected}</strong>
@@ -318,7 +340,7 @@ export default function GameDetail() {
               <button type="button" aria-label="Přidat ránu" disabled={!myMember || Boolean(myMember.finished_at) || busy || visible.length !== expected || (activeScore?.strokes ?? 0) >= 30} onClick={() => void save(activeHole.hole_number, String(activeScore?.strokes ? activeScore.strokes + 1 : 1))}>+</button>
             </div>
             {game.scoring === 'stableford' && <div className="mobile-pill"><strong style={{ fontSize: 21 }}>{myMember ? points(myMember, activeHole) ?? '–' : '–'}</strong><div className="mobile-sub">Stableford bodů za jamku</div></div>}
-            <div className="mobile-nav" style={{ marginTop: 8 }}>
+            <div className="mobile-minor-actions">
               <button type="button" disabled={!myMember || Boolean(myMember.finished_at) || busy || visible.length !== expected} onClick={() => void save(activeHole.hole_number, 'X')}>Zvednutý míč (X)</button>
               <button type="button" disabled={!myMember || Boolean(myMember.finished_at) || busy || visible.length !== expected || !activeScore} onClick={() => void save(activeHole.hole_number, '')}>Smazat skóre</button>
             </div>
@@ -332,6 +354,36 @@ export default function GameDetail() {
           <h3 style={{ marginTop: 0 }}>Přehled jamek</h3>
           <div className="mobile-holes">{visible.map(h => <button key={h.hole_number} type="button" className={`${mobileHole === h.hole_number ? 'active' : ''} ${myMember && scores[myMember.id]?.[h.hole_number] ? 'recorded' : ''}`} onClick={() => setMobileHole(h.hole_number)}>{h.hole_number}</button>)}</div>
         </div>
+        </> : <div className="mobile-card">
+          <h3 style={{ marginTop: 0 }}>Společná scorekarta flightu</h3>
+          <p className="mobile-sub">Všech {expected} jamek. Své rány můžeš měnit, výsledky ostatních hráčů pouze sledovat. Tabulku lze posunout do strany.</p>
+          <div className="mobile-score-scroll">
+            <table className="mobile-score-table">
+              <thead>
+                <tr><th rowSpan={2}>Jamka</th><th rowSpan={2}>PAR</th><th rowSpan={2}>SI</th>{members.map(member => <th key={member.id} colSpan={game.scoring === 'stableford' ? 2 : 1}>{member.nickname}{member.player_id === userId ? ' (já)' : ''}</th>)}</tr>
+                <tr>{members.map(member => <Fragment key={member.id}><th>Rány</th>{game.scoring === 'stableford' && <th>Body</th>}</Fragment>)}</tr>
+              </thead>
+              <tbody>{visible.map(hole => <tr key={hole.hole_number}>
+                <th>{hole.hole_number}</th><td>{hole.par}</td><td>{hole.stroke_index}</td>
+                {members.map(member => {
+                  const score = scores[member.id]?.[hole.hole_number];
+                  const editable = member.player_id === userId && !member.finished_at && visible.length === expected;
+                  return <Fragment key={member.id}>
+                    <td className={member.player_id === userId ? 'my-score' : ''}>
+                      {editable ? <select aria-label={`Rány ${member.nickname}, jamka ${hole.hole_number}`} disabled={busy} value={score?.picked_up ? 'X' : score?.strokes ?? ''} onChange={e => void save(hole.hole_number, e.target.value)}>
+                        <option value="">–</option>
+                        {Array.from({ length: 30 }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1}</option>)}
+                        <option value="X">X</option>
+                      </select> : score?.picked_up ? 'X' : score?.strokes ?? '–'}
+                    </td>
+                    {game.scoring === 'stableford' && <td>{points(member, hole) ?? '–'}</td>}
+                  </Fragment>;
+                })}
+              </tr>)}</tbody>
+              <tfoot><tr><th>Celkem</th><th>{visible.reduce((sum, hole) => sum + hole.par, 0)}</th><th>–</th>{members.map(member => <Fragment key={member.id}><th>{totalStrokes(member)}</th>{game.scoring === 'stableford' && <th>{totalPoints(member) ?? '–'}</th>}</Fragment>)}</tr></tfoot>
+            </table>
+          </div>
+        </div>}
         <div className="mobile-card">
           <h3 style={{ marginTop: 0 }}>Průběžné výsledky</h3>
           <table className="mobile-rows"><tbody>{[...members].sort((a,b) => game.scoring === 'stableford' ? (totalPoints(b) ?? -1) - (totalPoints(a) ?? -1) : totalStrokes(a) - totalStrokes(b)).map((member,i) => <tr key={member.id}><td>{i+1}. {member.nickname}{member.player_id === userId ? ' (já)' : ''}</td><td>{game.scoring === 'stableford' ? `${totalPoints(member) ?? '–'} b` : `${totalStrokes(member)} ran`}</td></tr>)}</tbody></table>
