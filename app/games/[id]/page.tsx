@@ -2,7 +2,6 @@
 
 import type { TouchEvent } from 'react';
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
-import { flushSync } from 'react-dom';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabase';
@@ -33,6 +32,11 @@ export default function GameDetail() {
   const [mobileHole, setMobileHole] = useState(1);
   const [selectedPlayerId, setSelectedPlayerId] = useState('');
   const swipeStart = useRef<{ x: number; y: number; time: number } | null>(null);
+  const animationTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [slide, setSlide] = useState<{ from: string; to: string; dir: number; progress: number; settling: boolean } | null>(null);
+  const slideRef = useRef<typeof slide>(null);
+  function updateSlide(value: typeof slide) { slideRef.current = value; setSlide(value); }
+  useEffect(() => () => { if (animationTimer.current) clearTimeout(animationTimer.current); }, []);
   const [desktopPlayerId, setDesktopPlayerId] = useState('');
   const [mobileView, setMobileView] = useState<'hole' | 'card'>('hole');
   const [showEarlyFinish, setShowEarlyFinish] = useState(false);
@@ -156,47 +160,59 @@ export default function GameDetail() {
     { light: '#fff1dc', strong: '#f9dfb6', text: '#76440b', border: '#e5c48f' },
     { light: '#f1e8f8', strong: '#e4d5f1', text: '#503070', border: '#cbb3df' },
   ];
-  const selectedIndex = Math.max(0, members.findIndex(member => member.id === selectedMember?.id));
-  const selectedColors = playerColors[selectedIndex % playerColors.length];
-  const activeScore = selectedMember && activeHole ? scores[selectedMember.id]?.[activeHole.hole_number] : undefined;
-  const completedCount = selectedMember ? visible.filter(h => Boolean(scores[selectedMember.id]?.[h.hole_number])).length : 0;
   const ownCompletedCount = myMember ? visible.filter(h => Boolean(scores[myMember.id]?.[h.hole_number])).length : 0;
-  // View Transitions zachyti starou i novou kartu, takze se pri prepnuti
-  // pohybuji soucasne proti sobe. Bez podpory API funguje bezne prepnuti.
-  function selectPlayer(nextId: string, direction?: number) {
-    if (busy || !selectedMember || nextId === selectedMember.id) return;
-    const currentIndex = members.findIndex(member => member.id === selectedMember.id);
-    const nextIndex = members.findIndex(member => member.id === nextId);
-    if (nextIndex < 0) return;
-    const movement = direction ?? (nextIndex > currentIndex ? 1 : -1);
-    document.documentElement.dataset.playerSwipeDirection = movement > 0 ? 'next' : 'prev';
-    if (typeof document.startViewTransition === 'function' &&
-        !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      document.startViewTransition(() => { flushSync(() => setSelectedPlayerId(nextId)); });
-    } else {
-      setSelectedPlayerId(nextId);
-    }
+  function animatePlayer(targetId: string, direction?: number) {
+    if (busy || slideRef.current || !selectedMember || targetId === selectedMember.id) return;
+    const fromIndex = members.findIndex(member => member.id === selectedMember.id);
+    const toIndex = members.findIndex(member => member.id === targetId);
+    if (toIndex < 0) return;
+    const dir = direction ?? (toIndex > fromIndex ? 1 : -1);
+    updateSlide({ from: selectedMember.id, to: targetId, dir, progress: 0, settling: false });
+    requestAnimationFrame(() => requestAnimationFrame(() => finishSlide(true)));
   }
-  function switchPlayer(direction: number) {
-    if (busy || members.length < 2 || !selectedMember) return;
-    const index = members.findIndex(member => member.id === selectedMember.id);
-    selectPlayer(members[(index + direction + members.length) % members.length].id, direction);
+
+  function finishSlide(commit: boolean) {
+    const current = slideRef.current;
+    if (!current) return;
+    updateSlide({ ...current, progress: commit ? 1 : 0, settling: true });
+    if (animationTimer.current) clearTimeout(animationTimer.current);
+    animationTimer.current = setTimeout(() => {
+      if (commit) setSelectedPlayerId(current.to);
+      updateSlide(null);
+    }, 280);
   }
+
   function onScoreTouchStart(e: TouchEvent<HTMLElement>) {
-    if (e.touches.length !== 1) { swipeStart.current = null; return; }
+    if (e.touches.length !== 1 || slideRef.current || busy) { swipeStart.current = null; return; }
     swipeStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY, time: Date.now() };
+  }
+
+  function onScoreTouchMove(e: TouchEvent<HTMLElement>) {
+    const start = swipeStart.current;
+    if (!start || e.touches.length !== 1 || members.length < 2 || !selectedMember) return;
+    const dx = e.touches[0].clientX - start.x;
+    const dy = e.touches[0].clientY - start.y;
+    if (Math.abs(dy) > Math.abs(dx) && !slideRef.current) return;
+    if (Math.abs(dx) < 8 && !slideRef.current) return;
+    const dir = dx < 0 ? 1 : -1;
+    const index = members.findIndex(member => member.id === selectedMember.id);
+    const next = members[(index + dir + members.length) % members.length];
+    const width = Math.max(1, e.currentTarget.clientWidth);
+    const progress = Math.min(1, Math.abs(dx) / width);
+    const existing = slideRef.current;
+    if (existing?.settling) return;
+    updateSlide({ from: selectedMember.id, to: next.id, dir, progress, settling: false });
   }
 
   function onScoreTouchEnd(e: TouchEvent<HTMLElement>) {
     const start = swipeStart.current;
     swipeStart.current = null;
-    if (!start || e.changedTouches.length !== 1) return;
+    const current = slideRef.current;
+    if (!start || !current || e.changedTouches.length !== 1) return;
     const dx = e.changedTouches[0].clientX - start.x;
     const dy = e.changedTouches[0].clientY - start.y;
-    // Horizontalni gesto; svisle posouvani stranky zustava nedotcene.
-    if (Math.abs(dx) >= 40 && Math.abs(dx) > Math.abs(dy) * 1.2 && Date.now() - start.time < 1500) {
-      switchPlayer(dx < 0 ? 1 : -1);
-    }
+    const elapsed = Date.now() - start.time;
+    finishSlide(Math.abs(dx) >= 55 && Math.abs(dx) > Math.abs(dy) * 1.15 && elapsed < 2000);
   }
 
   function playingHandicap(member: Member): number | null {
@@ -320,6 +336,41 @@ export default function GameDetail() {
        router.replace('/history');
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { savingRef.current = false; setBusy(false); }
+  }
+
+  function renderPlayerCard(cardMember: Member, animatedStyle?: { transform: string; transition: string; position?: 'absolute' | 'relative' }) {
+    const cardIndex = Math.max(0, members.findIndex(member => member.id === cardMember.id));
+    const colors = playerColors[cardIndex % playerColors.length];
+    const cardScore = activeHole ? scores[cardMember.id]?.[activeHole.hole_number] : undefined;
+    const cardCompleted = visible.filter(h => Boolean(scores[cardMember.id]?.[h.hole_number])).length;
+    return <div key={cardMember.id} className="mobile-card swipe-player-area" style={{ background: colors.light, border: `2px solid ${colors.border}`, margin: 0, width: '100%', boxSizing: 'border-box', position: animatedStyle?.position || 'relative', inset: animatedStyle?.position === 'absolute' ? 0 : undefined, transform: animatedStyle?.transform, transition: animatedStyle?.transition, willChange: 'transform' }}>
+          <div className="mobile-nav">
+            <strong>Jamka {activeHole?.hole_number ?? '–'} / {expected}</strong>
+            <span className="mobile-sub">{cardCompleted} z {expected} zapsáno</span>
+          </div>
+          {cardMember?.finished_at && <p className="mobile-sub" style={{ color: '#8a6034', fontWeight: 700 }}>Hráč již ukončil hru – skóre je pouze ke čtení.</p>}
+          {activeHole && <>
+            <p className="mobile-sub">{cardMember ? teeName(cardMember) : ''} · PAR {cardMember ? memberHole(cardMember, activeHole.hole_number)?.par ?? activeHole.par : activeHole.par} · SI {cardMember ? memberHole(cardMember, activeHole.hole_number)?.stroke_index ?? activeHole.stroke_index : activeHole.stroke_index}{(cardMember ? memberHole(cardMember, activeHole.hole_number)?.length_m : activeHole.length_m) != null ? ` · ${cardMember ? memberHole(cardMember, activeHole.hole_number)?.length_m : activeHole.length_m} m` : ''}</p>
+            <div className="mobile-nav" style={{ marginTop: 7 }}>
+              <div><strong>{cardMember?.nickname || 'Moje skóre'}</strong><div className="mobile-sub">Herní HCP {cardMember ? playingHandicap(cardMember) ?? '–' : '–'}</div></div>
+              <div style={{ textAlign: 'right' }}><strong>{cardMember ? totalPoints(cardMember) ?? '–' : '–'}</strong><div className="mobile-sub">Celkem bodů</div></div>
+            </div>
+            <div className="mobile-stepper">
+              <button type="button" aria-label="Odebrat ránu" disabled={!myMember || Boolean(myMember.finished_at) || !cardMember || Boolean(cardMember.finished_at) || busy || visible.length !== expected || !cardScore?.strokes || cardScore.strokes <= 1} onClick={() => void save(activeHole.hole_number, String((cardScore?.strokes || 1) - 1), cardMember)}>−</button>
+              <div><div className="mobile-number">{cardScore?.picked_up ? 'X' : cardScore?.strokes ?? '–'}</div><div className="mobile-sub" style={{ textAlign: 'center' }}>RÁNY</div></div>
+              <button type="button" aria-label="Přidat ránu" disabled={!myMember || Boolean(myMember.finished_at) || !cardMember || Boolean(cardMember.finished_at) || busy || visible.length !== expected || (cardScore?.strokes ?? 0) >= 30} onClick={() => void save(activeHole.hole_number, String(cardScore?.strokes ? cardScore.strokes + 1 : 1), cardMember)}>+</button>
+            </div>
+            {game.scoring === 'stableford' && <div className="mobile-pill"><strong style={{ fontSize: 25 }}>{cardMember ? points(cardMember, activeHole) ?? '–' : '–'} {cardMember && points(cardMember, activeHole) === 1 ? 'bod' : 'body'}</strong><div className="mobile-sub">Stableford za jamku</div></div>}
+            <div className="mobile-minor-actions">
+              <button type="button" disabled={!myMember || Boolean(myMember.finished_at) || !cardMember || Boolean(cardMember.finished_at) || busy || visible.length !== expected} onClick={() => void save(activeHole.hole_number, 'X', cardMember)}>Zvednutý míč (X)</button>
+              <button type="button" disabled={!myMember || Boolean(myMember.finished_at) || !cardMember || Boolean(cardMember.finished_at) || busy || visible.length !== expected || !cardScore} onClick={() => void save(activeHole.hole_number, '', cardMember)}>Smazat skóre</button>
+            </div>
+            <div className="mobile-nav" style={{ marginTop: 8 }}>
+              <button type="button" disabled={activeHole.hole_number <= 1} onClick={() => setMobileHole(Math.max(1, activeHole.hole_number - 1))}>← Předchozí</button>
+              <button type="button" className="mobile-nav-next" disabled={activeHole.hole_number >= expected} onClick={() => setMobileHole(Math.min(expected, activeHole.hole_number + 1))}>Další →</button>
+            </div>
+          </>}
+    </div>;
   }
 
   return <main>
@@ -515,38 +566,16 @@ export default function GameDetail() {
           <button type="button" className={mobileView === 'card' ? 'selected' : ''} aria-pressed={mobileView === 'card'} onClick={() => setMobileView('card')}>Celá scorekarta</button>
         </div>
         {mobileView === 'hole' ? <>
-        <div className="mobile-card swipe-player-area" onTouchStartCapture={onScoreTouchStart} onTouchEndCapture={onScoreTouchEnd} onTouchCancel={() => { swipeStart.current = null; }} style={{ background: selectedColors.light, border: `2px solid ${selectedColors.border}`, transition: 'background-color 180ms ease, border-color 180ms ease' }}>
-          <div className="flight-player-strip" role="group" aria-label="Vybrat hráče pro zápis skóre">
-            {members.map((member, index) => <button key={member.id} type="button" className={`${selectedMember?.id === member.id ? 'selected' : ''} ${member.finished_at ? 'finished' : ''}`} style={{ background: selectedMember?.id === member.id ? playerColors[index % playerColors.length].strong : playerColors[index % playerColors.length].light, color: playerColors[index % playerColors.length].text, borderColor: selectedMember?.id === member.id ? playerColors[index % playerColors.length].text : playerColors[index % playerColors.length].border }} disabled={busy} aria-pressed={selectedMember?.id === member.id} onClick={() => selectPlayer(member.id)} title={member.finished_at ? 'Hráč dokončil hru – skóre nelze měnit' : member.nickname}>
-              {member.nickname}{member.player_id === userId ? ' (já)' : ''}{member.finished_at ? ' ✓' : ''}
-            </button>)}
-          </div>
-          <div className="mobile-nav">
-            <strong>Jamka {activeHole?.hole_number ?? '–'} / {expected}</strong>
-            <span className="mobile-sub">{completedCount} z {expected} zapsáno</span>
-          </div>
-          {selectedMember?.finished_at && <p className="mobile-sub" style={{ color: '#8a6034', fontWeight: 700 }}>Hráč již ukončil hru – skóre je pouze ke čtení.</p>}
-          {activeHole && <>
-            <p className="mobile-sub">{selectedMember ? teeName(selectedMember) : ''} · PAR {selectedMember ? memberHole(selectedMember, activeHole.hole_number)?.par ?? activeHole.par : activeHole.par} · SI {selectedMember ? memberHole(selectedMember, activeHole.hole_number)?.stroke_index ?? activeHole.stroke_index : activeHole.stroke_index}{(selectedMember ? memberHole(selectedMember, activeHole.hole_number)?.length_m : activeHole.length_m) != null ? ` · ${selectedMember ? memberHole(selectedMember, activeHole.hole_number)?.length_m : activeHole.length_m} m` : ''}</p>
-            <div className="mobile-nav" style={{ marginTop: 7 }}>
-              <div><strong>{selectedMember?.nickname || 'Moje skóre'}</strong><div className="mobile-sub">Herní HCP {selectedMember ? playingHandicap(selectedMember) ?? '–' : '–'}</div></div>
-              <div style={{ textAlign: 'right' }}><strong>{selectedMember ? totalPoints(selectedMember) ?? '–' : '–'}</strong><div className="mobile-sub">Celkem bodů</div></div>
-            </div>
-            <div className="mobile-stepper">
-              <button type="button" aria-label="Odebrat ránu" disabled={!myMember || Boolean(myMember.finished_at) || !selectedMember || Boolean(selectedMember.finished_at) || busy || visible.length !== expected || !activeScore?.strokes || activeScore.strokes <= 1} onClick={() => void save(activeHole.hole_number, String((activeScore?.strokes || 1) - 1))}>−</button>
-              <div><div className="mobile-number">{activeScore?.picked_up ? 'X' : activeScore?.strokes ?? '–'}</div><div className="mobile-sub" style={{ textAlign: 'center' }}>RÁNY</div></div>
-              <button type="button" aria-label="Přidat ránu" disabled={!myMember || Boolean(myMember.finished_at) || !selectedMember || Boolean(selectedMember.finished_at) || busy || visible.length !== expected || (activeScore?.strokes ?? 0) >= 30} onClick={() => void save(activeHole.hole_number, String(activeScore?.strokes ? activeScore.strokes + 1 : 1))}>+</button>
-            </div>
-            {game.scoring === 'stableford' && <div className="mobile-pill"><strong style={{ fontSize: 25 }}>{selectedMember ? points(selectedMember, activeHole) ?? '–' : '–'} {selectedMember && points(selectedMember, activeHole) === 1 ? 'bod' : 'body'}</strong><div className="mobile-sub">Stableford za jamku</div></div>}
-            <div className="mobile-minor-actions">
-              <button type="button" disabled={!myMember || Boolean(myMember.finished_at) || !selectedMember || Boolean(selectedMember.finished_at) || busy || visible.length !== expected} onClick={() => void save(activeHole.hole_number, 'X')}>Zvednutý míč (X)</button>
-              <button type="button" disabled={!myMember || Boolean(myMember.finished_at) || !selectedMember || Boolean(selectedMember.finished_at) || busy || visible.length !== expected || !activeScore} onClick={() => void save(activeHole.hole_number, '')}>Smazat skóre</button>
-            </div>
-            <div className="mobile-nav" style={{ marginTop: 8 }}>
-              <button type="button" disabled={activeHole.hole_number <= 1} onClick={() => setMobileHole(Math.max(1, activeHole.hole_number - 1))}>← Předchozí</button>
-              <button type="button" className="mobile-nav-next" disabled={activeHole.hole_number >= expected} onClick={() => setMobileHole(Math.min(expected, activeHole.hole_number + 1))}>Další →</button>
-            </div>
-          </>}
+        <div className="flight-player-strip" role="group" aria-label="Vybrat hráče pro zápis skóre">
+          {members.map((member, index) => <button key={member.id} type="button" className={`${selectedMember?.id === member.id ? 'selected' : ''} ${member.finished_at ? 'finished' : ''}`} style={{ background: selectedMember?.id === member.id ? playerColors[index % playerColors.length].strong : playerColors[index % playerColors.length].light, color: playerColors[index % playerColors.length].text, borderColor: selectedMember?.id === member.id ? playerColors[index % playerColors.length].text : playerColors[index % playerColors.length].border }} disabled={busy || Boolean(slide)} aria-pressed={selectedMember?.id === member.id} onClick={() => animatePlayer(member.id)} title={member.finished_at ? 'Hráč dokončil hru – skóre nelze měnit' : member.nickname}>
+            {member.nickname}{member.player_id === userId ? ' (já)' : ''}{member.finished_at ? ' ✓' : ''}
+          </button>)}
+        </div>
+        <div className="player-slide-viewport" onTouchStartCapture={onScoreTouchStart} onTouchMoveCapture={onScoreTouchMove} onTouchEndCapture={onScoreTouchEnd} onTouchCancel={() => { swipeStart.current = null; if (slideRef.current) finishSlide(false); }}>
+          {slide ? <>
+            {members.find(m => m.id === slide.from) && renderPlayerCard(members.find(m => m.id === slide.from)!, { transform: `translateX(${-slide.dir * slide.progress * 100}%)`, transition: slide.settling ? 'transform 270ms cubic-bezier(.2,.7,.2,1)' : 'none', position: 'relative' })}
+            {members.find(m => m.id === slide.to) && renderPlayerCard(members.find(m => m.id === slide.to)!, { transform: `translateX(${slide.dir * (1 - slide.progress) * 100}%)`, transition: slide.settling ? 'transform 270ms cubic-bezier(.2,.7,.2,1)' : 'none', position: 'absolute' })}
+          </> : selectedMember ? renderPlayerCard(selectedMember) : null}
         </div>
         <div className="mobile-card">
           <h3 style={{ marginTop: 0 }}>Přehled jamek</h3>
