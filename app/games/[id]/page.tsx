@@ -229,13 +229,18 @@ export default function GameDetail() {
         .golf-mobile .mobile-card { padding: 11px 12px; margin: 7px 0; }
         .golf-mobile .mobile-stepper { padding: 3px 0; }
         .golf-mobile .mobile-pill { padding: 5px; }
-        .golf-mobile .mobile-score-scroll { overflow-x: auto; width: 100%; -webkit-overflow-scrolling: touch; }
-        .golf-mobile .mobile-score-table { border-collapse: collapse; width: 100%; min-width: 390px; font-size: 11px; }
-        .golf-mobile .mobile-score-table th, .golf-mobile .mobile-score-table td { padding: 8px 4px; text-align: center; border-bottom: 1px solid #e1e9e3; white-space: nowrap; }
-        .golf-mobile .mobile-score-table thead th { background: #edf4ee; }
+        /* Kompaktni scorekarta: az ctyri hraci bez vodorovneho posouvani. */
+        .golf-mobile .mobile-score-scroll { width: 100%; overflow-x: hidden; }
+        .golf-mobile .mobile-score-table { border-collapse: collapse; table-layout: fixed; width: 100%; min-width: 0; font-size: clamp(8px, 2.4vw, 11px); font-variant-numeric: tabular-nums; }
+        .golf-mobile .mobile-score-table th, .golf-mobile .mobile-score-table td { box-sizing: border-box; padding: 7px 1px; text-align: center; border-bottom: 1px solid #e1e9e3; white-space: nowrap; overflow: hidden; }
+        .golf-mobile .mobile-score-table thead th { background: #edf4ee; font-weight: 700; }
+        .golf-mobile .mobile-score-table .player-name { display: block; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: clamp(8px, 2.3vw, 11px); }
         .golf-mobile .mobile-score-table .my-score { background: #e5f0e8; }
-        .golf-mobile .mobile-score-table select { max-width: 50px; padding: 5px 2px; font-size: 12px; }
+        .golf-mobile .mobile-score-table select { display: block; width: 100%; min-width: 0; max-width: none; height: 28px; padding: 0; margin: 0; border: 1px solid #c8d8ce; border-radius: 4px; background: #fff; color: #123d2b; font-size: 12px; text-align: center; text-align-last: center; appearance: none; -webkit-appearance: none; }
         .golf-mobile .mobile-score-table tfoot th { font-weight: 800; border-top: 2px solid #c8d8ce; }
+        .golf-mobile .mobile-score-table .base-col { width: 7%; }
+        .golf-mobile .mobile-score-table .player-col { width: auto; }
+
       }
     `}</style>
     <p className="brand">LONY GOLF SCORECARD</p>
@@ -268,7 +273,7 @@ export default function GameDetail() {
                   <div style={{ fontSize: '0.8em', fontWeight: 400 }}>HCP {member.handicap_snapshot ?? '–'}{playingHandicap(member) !== null ? ` · Herní ${playingHandicap(member)}` : ''}</div>
                 </th>)}
               </tr>
-              <tr>{members.map(member => <Fragment key={member.id}><th>Rány</th>{game.scoring === 'stableford' && <th>Body</th>}</Fragment>)}</tr>
+              <tr>{members.map(member => <Fragment key={member.id}><th title="Rány">R</th>{game.scoring === 'stableford' && <th title="Body">B</th>}</Fragment>)}</tr>
             </thead>
             <tbody>
               {visible.map(hole => <tr key={hole.hole_number}>
@@ -356,12 +361,16 @@ export default function GameDetail() {
         </div>
         </> : <div className="mobile-card">
           <h3 style={{ marginTop: 0 }}>Společná scorekarta flightu</h3>
-          <p className="mobile-sub">Všech {expected} jamek. Své rány můžeš měnit, výsledky ostatních hráčů pouze sledovat. Tabulku lze posunout do strany.</p>
+          <p className="mobile-sub">Všech {expected} jamek a všichni hráči pohromadě. Klepnutím na číslo ran upravíš svůj výsledek.</p>
           <div className="mobile-score-scroll">
             <table className="mobile-score-table">
+              <colgroup>
+                <col className="base-col" /><col className="base-col" /><col className="base-col" />
+                {members.map(member => <Fragment key={member.id}><col className="player-col" />{game.scoring === 'stableford' && <col className="player-col" />}</Fragment>)}
+              </colgroup>
               <thead>
-                <tr><th rowSpan={2}>Jamka</th><th rowSpan={2}>PAR</th><th rowSpan={2}>SI</th>{members.map(member => <th key={member.id} colSpan={game.scoring === 'stableford' ? 2 : 1}>{member.nickname}{member.player_id === userId ? ' (já)' : ''}</th>)}</tr>
-                <tr>{members.map(member => <Fragment key={member.id}><th>Rány</th>{game.scoring === 'stableford' && <th>Body</th>}</Fragment>)}</tr>
+                <tr><th rowSpan={2} title="Jamka">J</th><th rowSpan={2}>PAR</th><th rowSpan={2}>SI</th>{members.map(member => <th key={member.id} colSpan={game.scoring === 'stableford' ? 2 : 1} title={member.nickname}><span className="player-name">{member.nickname}{member.player_id === userId ? ' (já)' : ''}</span></th>)}</tr>
+                <tr>{members.map(member => <Fragment key={member.id}><th title="Rány">R</th>{game.scoring === 'stableford' && <th title="Body">B</th>}</Fragment>)}</tr>
               </thead>
               <tbody>{visible.map(hole => <tr key={hole.hole_number}>
                 <th>{hole.hole_number}</th><td>{hole.par}</td><td>{hole.stroke_index}</td>
@@ -380,7 +389,7 @@ export default function GameDetail() {
                   </Fragment>;
                 })}
               </tr>)}</tbody>
-              <tfoot><tr><th>Celkem</th><th>{visible.reduce((sum, hole) => sum + hole.par, 0)}</th><th>–</th>{members.map(member => <Fragment key={member.id}><th>{totalStrokes(member)}</th>{game.scoring === 'stableford' && <th>{totalPoints(member) ?? '–'}</th>}</Fragment>)}</tr></tfoot>
+              <tfoot><tr><th title="Celkem">Σ</th><th>{visible.reduce((sum, hole) => sum + hole.par, 0)}</th><th>–</th>{members.map(member => <Fragment key={member.id}><th>{totalStrokes(member)}</th>{game.scoring === 'stableford' && <th>{totalPoints(member) ?? '–'}</th>}</Fragment>)}</tr></tfoot>
             </table>
           </div>
         </div>}
