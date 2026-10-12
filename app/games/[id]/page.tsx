@@ -249,6 +249,29 @@ export default function GameDetail() {
     const extra = Math.floor(ch / 18) + (ownHole.stroke_index <= ((ch % 18) + 18) % 18 ? 1 : 0);
     return Math.max(0, 2 + ownHole.par + extra - score.strokes);
   }
+  // Tradiční golfové značení ran vzhledem k PAR konkrétního hráče.
+  function scoreMark(member: Member, hole: Hole) {
+    const score = scores[member.id]?.[hole.hole_number];
+    if (!score || score.picked_up || score.strokes == null) return null;
+    const par = memberHole(member, hole.hole_number)?.par ?? hole.par;
+    const difference = score.strokes - par;
+    const label = difference <= -3 ? 'Albatros nebo lepší' :
+      difference === -2 ? 'Eagle' :
+      difference === -1 ? 'Birdie' :
+      difference === 0 ? 'Par' :
+      difference === 1 ? 'Bogey' :
+      difference === 2 ? 'Double bogey' : 'Triple bogey nebo horší';
+    const kind = difference <= -3 ? 'albatross' :
+      difference === -2 ? 'eagle' :
+      difference === -1 ? 'birdie' :
+      difference === 0 ? 'par' :
+      difference === 1 ? 'bogey' :
+      difference === 2 ? 'double-bogey' : 'triple-bogey';
+    return <span className={`golf-score-mark golf-score-${kind}`} title={`${label} (${difference > 0 ? '+' : ''}${difference} vůči PAR ${par})`} aria-label={`${score.strokes} ran, ${label}`}>
+      {score.strokes}
+    </span>;
+  }
+
   function totalStrokes(member: Member): number {
     return visible.reduce((sum, h) => sum + (scores[member.id]?.[h.hole_number]?.strokes || 0), 0);
   }
@@ -396,6 +419,43 @@ export default function GameDetail() {
 
   return <main>
     <style>{`
+      /* Golfové symboly: zelené kruhy pod PAR, červené čtverce nad PAR. */
+      .golf-score-mark {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 25px; height: 25px; box-sizing: border-box;
+        font-weight: 800; font-size: 13px; line-height: 1;
+        color: #163c2b; vertical-align: middle; background: #fff;
+      }
+      .golf-score-birdie, .golf-score-eagle, .golf-score-albatross {
+        border: 2px solid #16834b; border-radius: 50%;
+        color: #11633a; background: #e9f7ee;
+      }
+      .golf-score-eagle {
+        outline: 2px solid #16834b; outline-offset: 2px;
+      }
+      .golf-score-albatross {
+        outline: 2px solid #16834b; outline-offset: 2px;
+        box-shadow: inset 0 0 0 2px #fff, inset 0 0 0 4px #16834b;
+      }
+      .golf-score-par { background: transparent; color: inherit; }
+      .golf-score-bogey, .golf-score-double-bogey, .golf-score-triple-bogey {
+        border: 2px solid #c43232; border-radius: 2px;
+        color: #a92323; background: #fff0f0;
+      }
+      .golf-score-double-bogey {
+        outline: 2px solid #c43232; outline-offset: 2px;
+      }
+      .golf-score-triple-bogey {
+        outline: 2px solid #a92323; outline-offset: 2px;
+        box-shadow: inset 0 0 0 2px #fff, inset 0 0 0 4px #a92323;
+      }
+      @media (max-width: 700px) {
+        .mobile-score-table .golf-score-mark { width: 19px; height: 19px; font-size: 11px; border-width: 1.5px; }
+        .mobile-score-table .golf-score-eagle,
+        .mobile-score-table .golf-score-albatross,
+        .mobile-score-table .golf-score-double-bogey,
+        .mobile-score-table .golf-score-triple-bogey { outline-width: 1px; outline-offset: 1px; }
+      }
       .golf-mobile { display: none; }
       @media (max-width: 700px) {
         main:has(.golf-mobile) { padding: 10px 12px 45px !important; width: 100% !important; max-width: 100% !important; }
@@ -536,7 +596,7 @@ export default function GameDetail() {
                   const score = scores[member.id]?.[hole.hole_number];
                   return <Fragment key={member.id}>
                     <td className={`player-group-${index} player-start stroke-value`}>
-                      {score?.picked_up ? 'X' : score?.strokes ?? '–'}
+                      {scoreMark(member, hole) ?? (score?.picked_up ? 'X' : '–')}
                     </td>
                     {game.scoring === 'stableford' && <td className={`player-group-${index} point-value`}>{points(member, hole) ?? '–'}</td>}
                   </Fragment>;
@@ -628,7 +688,7 @@ export default function GameDetail() {
                   const score = scores[member.id]?.[hole.hole_number];
                   return <Fragment key={member.id}>
                     <td className={`player-group-${index} player-start stroke-value`}>
-                      {score?.picked_up ? 'X' : score?.strokes ?? '–'}
+                      {scoreMark(member, hole) ?? (score?.picked_up ? 'X' : '–')}
                     </td>
                     {game.scoring === 'stableford' && <td className={`player-group-${index} point-value`}>{points(member, hole) ?? '–'}</td>}
                   </Fragment>;
