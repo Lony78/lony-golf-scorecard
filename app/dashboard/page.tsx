@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
+import type { CSSProperties } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../lib/supabase';
@@ -62,23 +63,91 @@ export default function Dashboard() {
   async function logout() { await supabase().auth.signOut(); router.replace('/login'); }
   if (loading) return <main>Ověřuji přihlášení…</main>;
   const items = [
-    { label: 'Aktivní hra', href: active ? '/games/' + active.id : '', icon: '⛳' },
-    { label: 'Nová hra', href: '/games/new', icon: '＋' },
-    { label: 'Moje hry', href: '/games', icon: '▤' },
-    { label: 'Žebříček', href: '', icon: '🏆' },
-    { label: 'Historie', href: '/history', icon: '↺' },
+    { label: 'Aktivní hra', subtitle: activeLoading ? 'Načítám…' : activeError ? 'Nelze načíst' : active ? 'Hra právě probíhá' : 'Žádná rozehraná hra', href: active ? '/games/' + active.id : '', icon: '▷', image: '/dashboard-v12/active-game.webp', inactive: !active || activeLoading || Boolean(activeError) },
+    { label: 'Nová hra', subtitle: 'Založ novou hru', href: '/games/new', icon: '+', image: '/dashboard-v12/new-game.webp', inactive: false },
+    { label: 'Moje hry', subtitle: 'Přehled a výsledky', href: '/games', icon: '☷', image: '/dashboard-v12/my-games.webp', inactive: false },
+    { label: 'Žebříček', subtitle: 'Připravujeme', href: '', icon: '🏆', image: '/dashboard-v12/leaderboard.webp', inactive: true },
+    { label: 'Historie', subtitle: 'Tvoje odehrané hry', href: '/history', icon: '↶', image: '/dashboard-v12/history.webp', inactive: false },
   ];
   return <main className="lony-dashboard">
     <style>{`
-      .lony-dashboard { position: relative; isolation: isolate; overflow: hidden; max-width: 520px; min-height: 100dvh; background: #0b271a url('/golf-photo-final.jpg') center bottom / cover no-repeat; }
-      .lony-dashboard::before { content: ''; position: absolute; inset: 0; z-index: -1; background: linear-gradient(180deg,rgba(7,28,18,.40) 0%,rgba(7,28,18,.12) 42%,rgba(7,28,18,0) 72%); pointer-events: none; }
-      .lony-dashboard::after { content: ''; position: absolute; inset: 0; z-index: -1; background: radial-gradient(ellipse at 88% 48%,rgba(82,111,49,.15),transparent 47%); pointer-events: none; }
-      .lony-dashboard .lony-card { position: relative; overflow: hidden; min-width: 0; min-height: 120px; background: linear-gradient(145deg,#f7f9ee,#e9f1df); color: #203e2d; border-radius: 20px; padding: 18px; text-decoration: none; display: flex; flex-direction: column; justify-content: center; gap: 12px; box-shadow: 0 12px 28px rgba(0,0,0,.18); }
-      .lony-dashboard .lony-card::before { content: ''; position: absolute; width: 160px; height: 145px; border-radius: 65% 0 0 0; right: -70px; bottom: -80px; background: rgba(151,187,137,.13); transform: rotate(-25deg); pointer-events: none; }
-      .lony-dashboard .lony-card--inactive { background: linear-gradient(145deg,#d9dcda,#c8cdca); color: #777d78; box-shadow: 0 12px 28px rgba(0,0,0,.12); }
-      .lony-dashboard .lony-card--inactive::before { background: rgba(105,115,108,.08); }
-      .lony-dashboard .lony-card:focus-visible { outline: 3px solid #d9e7b5; outline-offset: 3px; }
-      @media (min-width: 600px) { .lony-dashboard { border-left: 1px solid rgba(255,255,255,.06); border-right: 1px solid rgba(255,255,255,.06); } }
+      .lony-dashboard {
+        position: relative; isolation: isolate; overflow: hidden;
+        max-width: 520px; min-height: 100dvh;
+        background: #0b271a url('/golf-photo-final.jpg') center bottom / cover no-repeat;
+        color: #fff;
+      }
+      .lony-dashboard::before {
+        content: ''; position: absolute; inset: 0; z-index: -1;
+        background: linear-gradient(180deg,rgba(5,31,21,.75) 0%,rgba(6,36,24,.60) 47%,rgba(7,28,18,.22) 100%);
+        pointer-events: none;
+      }
+      .lony-dashboard .brand { color: #f0f3dd; letter-spacing: .17em; font-weight: 750; }
+      .lony-dashboard .brand::first-letter { color: #fff; }
+      .lony-dashboard .lony-tiles {
+        display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px;
+      }
+      .lony-dashboard .lony-card {
+        position: relative; isolation: isolate; overflow: hidden;
+        display: flex; flex-direction: column; justify-content: flex-end;
+        box-sizing: border-box; min-width: 0; min-height: 185px;
+        padding: 16px; border-radius: 23px;
+        border: 1px solid rgba(245,255,243,.34);
+        background: #163d2a; color: #fff; text-decoration: none;
+        box-shadow: 0 12px 28px rgba(0,0,0,.22);
+        transition: transform .16s ease, border-color .16s ease;
+      }
+      .lony-dashboard a.lony-card:active { transform: scale(.98); }
+      .lony-dashboard a.lony-card:hover { border-color: rgba(255,255,255,.78); }
+      .lony-dashboard .lony-card::before {
+        content: ''; position: absolute; inset: 0; z-index: -2;
+        background-image: var(--tile-image); background-size: cover;
+        background-position: center 30%;
+      }
+      .lony-dashboard .lony-card::after {
+        content: ''; position: absolute; inset: 0; z-index: -1;
+        background: linear-gradient(180deg,rgba(4,31,20,.04) 0%,rgba(4,31,20,.32) 36%,rgba(3,32,20,.96) 100%);
+      }
+      .lony-dashboard .lony-card--inactive { opacity: .77; cursor: default; }
+      .lony-dashboard .lony-card--inactive::after {
+        background: linear-gradient(180deg,rgba(12,35,26,.23),rgba(5,31,21,.94));
+      }
+      .lony-dashboard .lony-card-icon {
+        display: grid; place-items: center; width: 43px; height: 43px;
+        margin-bottom: 13px; border: 2px solid rgba(255,255,255,.94);
+        border-radius: 50%; font-size: 29px; line-height: 1; font-weight: 500;
+      }
+      .lony-dashboard .lony-card-heading {
+        display: flex; align-items: center; justify-content: space-between; gap: 4px;
+        font-size: clamp(17px,4.5vw,23px); font-weight: 800; line-height: 1.2;
+        white-space: nowrap;
+      }
+      .lony-dashboard .lony-card-arrow { font-size: 25px; font-weight: 300; opacity: .95; }
+      .lony-dashboard .lony-card-subtitle {
+        margin-top: 5px; color: rgba(255,255,255,.81);
+        font-size: clamp(11px,3.1vw,14px); line-height: 1.3;
+      }
+      .lony-dashboard .lony-card--wide {
+        grid-column: 1 / -1; min-height: 104px; padding: 16px 19px;
+        flex-direction: row; align-items: center; justify-content: flex-start; gap: 15px;
+      }
+      .lony-dashboard .lony-card--wide::before { background-position: center 55%; }
+      .lony-dashboard .lony-card--wide::after {
+        background: linear-gradient(90deg,rgba(3,31,21,.95),rgba(4,37,25,.69));
+      }
+      .lony-dashboard .lony-card--wide .lony-card-icon { flex-shrink: 0; margin: 0; }
+      .lony-dashboard .lony-card--wide .lony-card-content { flex: 1; min-width: 0; }
+      .lony-dashboard .lony-card--wide .lony-card-arrow { margin-left: auto; }
+      .lony-dashboard .lony-card:focus-visible { outline: 3px solid #e5d49b; outline-offset: 3px; }
+      @media (max-width: 360px) {
+        .lony-dashboard .lony-tiles { gap: 9px; }
+        .lony-dashboard .lony-card { padding: 12px; min-height: 164px; border-radius: 18px; }
+        .lony-dashboard .lony-card-heading { font-size: 16px; }
+        .lony-dashboard .lony-card-icon { width: 37px; height: 37px; font-size: 25px; }
+      }
+      @media (min-width: 600px) {
+        .lony-dashboard { border-left: 1px solid rgba(255,255,255,.06); border-right: 1px solid rgba(255,255,255,.06); }
+      }
     `}</style>
     <header style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:12,position:'relative',marginBottom:28}}>
       <p className="brand" style={{margin:0,fontSize:'clamp(11px,2.7vw,15px)'}}>LONY GOLF SCORECARD</p>
@@ -100,21 +169,23 @@ export default function Dashboard() {
     </header>
     <h1 style={{marginBottom:8}}>Ahoj, {nickname}!</h1>
     <p style={{color:'#d9e7b5',marginBottom:24}}>Tvůj golfový přehled</p>
-    <div style={{display:'grid',gridTemplateColumns:'repeat(2,minmax(0,1fr))',gap:12}}>
-      {items.map(item => item.label === 'Aktivní hra' ? (
-        active && !activeLoading && !activeError ?
-          <Link className="lony-card" key={item.label} href={'/games/' + active.id} style={{fontWeight:750,fontSize:'clamp(16px,3.6vw,22px)'}}>
-            <span aria-hidden="true" style={{fontSize:25}}>{item.icon}</span>
-            <span>{item.label}</span>
-            <small style={{fontSize:12,color:'#287343',fontWeight:700}}>Hra právě probíhá</small>
-          </Link>
-        :
-          <div className="lony-card lony-card--inactive" key={item.label}>
-            <span aria-hidden="true" style={{fontSize:25,filter:'grayscale(1)',opacity:.65}}>{item.icon}</span>
-            <strong style={{fontSize:'clamp(16px,3.6vw,22px)'}}>{item.label}</strong>
-            <small style={{color:'#777d78',fontSize:12}}>{activeLoading ? 'Načítám…' : activeError ? 'Nelze načíst' : 'Žádná rozehraná hra'}</small>
-          </div>
-      ) : item.href ? <Link className="lony-card" key={item.label} href={item.href} style={{fontWeight:750,fontSize:'clamp(16px,3.6vw,22px)'}}><span aria-hidden="true" style={{fontSize:25}}>{item.icon}</span><span>{item.label}</span></Link> : <div className="lony-card" key={item.label}><span aria-hidden="true" style={{fontSize:25}}>{item.icon}</span><strong style={{fontSize:'clamp(16px,3.6vw,22px)'}}>{item.label}</strong><small style={{color:'#587160'}}>Připravujeme</small></div>)}
+    <div className="lony-tiles">
+      {items.map(item => {
+        const wide = item.label === 'Historie';
+        const cardClass = `lony-card${wide ? ' lony-card--wide' : ''}${item.inactive ? ' lony-card--inactive' : ''}`;
+        const contents = <>
+          <span className="lony-card-icon" aria-hidden="true">{item.icon}</span>
+          <span className="lony-card-content">
+            <span className="lony-card-heading">{item.label}{!wide && !item.inactive && <span className="lony-card-arrow" aria-hidden="true">›</span>}</span>
+            <span className="lony-card-subtitle" style={{display:'block'}}>{item.subtitle}</span>
+          </span>
+          {wide && <span className="lony-card-arrow" aria-hidden="true">›</span>}
+        </>;
+        const cardStyle = { '--tile-image': `url("${item.image}")` } as CSSProperties;
+        return item.href && !item.inactive ?
+          <Link key={item.label} href={item.href} className={cardClass} style={cardStyle}>{contents}</Link> :
+          <div key={item.label} className={cardClass} style={cardStyle} aria-disabled="true">{contents}</div>;
+      })}
     </div>
     {activeError && <p role="alert" style={{color:'#f9c8b7',marginTop:12}}>Aktivní hra: {activeError}</p>}
   </main>;
