@@ -63,11 +63,11 @@ export default function Dashboard() {
   async function logout() { await supabase().auth.signOut(); router.replace('/login'); }
   if (loading) return <main>Ověřuji přihlášení…</main>;
   const items = [
-    { label: 'Aktivní hra', subtitle: activeLoading ? 'Načítám…' : activeError ? 'Nelze načíst' : active ? 'Hra právě probíhá' : 'Žádná rozehraná hra', href: active ? '/games/' + active.id : '', icon: '▷', image: '/dashboard-v12/active-game.webp', inactive: !active || activeLoading || Boolean(activeError) },
-    { label: 'Nová hra', subtitle: 'Založ novou hru', href: '/games/new', icon: '+', image: '/dashboard-v12/new-game.webp', inactive: false },
-    { label: 'Moje hry', subtitle: 'Přehled a výsledky', href: '/games', icon: '☷', image: '/dashboard-v12/my-games.webp', inactive: false },
-    { label: 'Žebříček', subtitle: 'Připravujeme', href: '', icon: '🏆', image: '/dashboard-v12/leaderboard.webp', inactive: true },
-    { label: 'Historie', subtitle: 'Tvoje odehrané hry', href: '/history', icon: '↶', image: '/dashboard-v12/history.webp', inactive: false },
+    { label: 'Aktivní hra', subtitle: activeLoading ? 'Načítám…' : activeError ? 'Nelze načíst' : active ? 'Hra právě probíhá' : 'Žádná rozehraná hra', href: active ? '/games/' + active.id : '', icon: '▷', image: '/dashboard-v121/active-game.webp', inactive: !active || activeLoading || Boolean(activeError) },
+    { label: 'Nová hra', subtitle: 'Založ novou hru', href: '/games/new', icon: '+', image: '/dashboard-v121/new-game.webp', inactive: false },
+    { label: 'Moje hry', subtitle: 'Přehled a výsledky', href: '/games', icon: '☷', image: '/dashboard-v121/my-games.webp', inactive: false },
+    { label: 'Žebříček', subtitle: 'Připravujeme', href: '', icon: '♜', image: '/dashboard-v121/leaderboard.webp', inactive: true },
+    { label: 'Historie', subtitle: 'Tvoje odehrané hry', href: '/history', icon: '↺', image: '/dashboard-v121/history.webp', inactive: false },
   ];
   return <main className="lony-dashboard">
     <style>{`
@@ -102,15 +102,15 @@ export default function Dashboard() {
       .lony-dashboard .lony-card::before {
         content: ''; position: absolute; inset: 0; z-index: -2;
         background-image: var(--tile-image); background-size: cover;
-        background-position: center 30%;
+        background-position: center center;
       }
       .lony-dashboard .lony-card::after {
         content: ''; position: absolute; inset: 0; z-index: -1;
-        background: linear-gradient(180deg,rgba(4,31,20,.04) 0%,rgba(4,31,20,.32) 36%,rgba(3,32,20,.96) 100%);
+        background: linear-gradient(180deg,rgba(4,31,20,0) 0%,rgba(4,31,20,.16) 37%,rgba(3,32,20,.93) 100%);
       }
       .lony-dashboard .lony-card--inactive { opacity: .77; cursor: default; }
       .lony-dashboard .lony-card--inactive::after {
-        background: linear-gradient(180deg,rgba(12,35,26,.23),rgba(5,31,21,.94));
+        background: linear-gradient(180deg,rgba(12,35,26,.08),rgba(5,31,21,.92));
       }
       .lony-dashboard .lony-card-icon {
         display: grid; place-items: center; width: 43px; height: 43px;
@@ -133,7 +133,7 @@ export default function Dashboard() {
       }
       .lony-dashboard .lony-card--wide::before { background-position: center 55%; }
       .lony-dashboard .lony-card--wide::after {
-        background: linear-gradient(90deg,rgba(3,31,21,.95),rgba(4,37,25,.69));
+        background: linear-gradient(90deg,rgba(3,31,21,.93),rgba(4,37,25,.28));
       }
       .lony-dashboard .lony-card--wide .lony-card-icon { flex-shrink: 0; margin: 0; }
       .lony-dashboard .lony-card--wide .lony-card-content { flex: 1; min-width: 0; }
