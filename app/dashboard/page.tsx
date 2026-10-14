@@ -1,6 +1,5 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import type { CSSProperties } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../lib/supabase';
@@ -63,11 +62,11 @@ export default function Dashboard() {
   async function logout() { await supabase().auth.signOut(); router.replace('/login'); }
   if (loading) return <main>Ověřuji přihlášení…</main>;
   const items = [
-    { label: 'Aktivní hra', subtitle: activeLoading ? 'Načítám…' : activeError ? 'Nelze načíst' : active ? 'Hra právě probíhá' : 'Žádná rozehraná hra', href: active ? '/games/' + active.id : '', icon: '▷', image: '/dashboard-v121/active-game.webp', inactive: !active || activeLoading || Boolean(activeError) },
-    { label: 'Nová hra', subtitle: 'Založ novou hru', href: '/games/new', icon: '+', image: '/dashboard-v121/new-game.webp', inactive: false },
-    { label: 'Moje hry', subtitle: 'Přehled a výsledky', href: '/games', icon: '☷', image: '/dashboard-v121/my-games.webp', inactive: false },
-    { label: 'Žebříček', subtitle: 'Připravujeme', href: '', icon: '♜', image: '/dashboard-v121/leaderboard.webp', inactive: true },
-    { label: 'Historie', subtitle: 'Tvoje odehrané hry', href: '/history', icon: '↺', image: '/dashboard-v121/history.webp', inactive: false },
+    { label: 'Aktivní hra', href: active && !activeLoading && !activeError ? '/games/' + active.id : '', image: '/dashboard-approved/01_aktivni_hra.png', inactive: !active || activeLoading || Boolean(activeError), status: activeLoading ? 'Načítám aktivní hru' : activeError ? 'Aktivní hru nelze načíst' : active ? 'Hra právě probíhá' : 'Žádná rozehraná hra' },
+    { label: 'Nová hra', href: '/games/new', image: '/dashboard-approved/02_nova_hra.png', inactive: false, status: 'Založ novou hru' },
+    { label: 'Moje hry', href: '/games', image: '/dashboard-approved/03_moje_hry.png', inactive: false, status: 'Přehled a výsledky' },
+    { label: 'Žebříček', href: '', image: '/dashboard-approved/04_zebricek.png', inactive: true, status: 'Připravujeme' },
+    { label: 'Historie', href: '/history', image: '/dashboard-approved/05_historie.png', inactive: false, status: 'Tvoje odehrané hry' },
   ];
   return <main className="lony-dashboard">
     <style>{`
@@ -85,65 +84,30 @@ export default function Dashboard() {
       .lony-dashboard .brand { color: #f0f3dd; letter-spacing: .17em; font-weight: 750; }
       .lony-dashboard .brand::first-letter { color: #fff; }
       .lony-dashboard .lony-tiles {
-        display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px;
+        display: grid; grid-template-columns: repeat(2,minmax(0,1fr));
+        column-gap: 3%; row-gap: 14px;
       }
       .lony-dashboard .lony-card {
-        position: relative; isolation: isolate; overflow: hidden;
-        display: flex; flex-direction: column; justify-content: flex-end;
-        box-sizing: border-box; min-width: 0; min-height: 185px;
-        padding: 16px; border-radius: 23px;
-        border: 1px solid rgba(245,255,243,.34);
-        background: #163d2a; color: #fff; text-decoration: none;
-        box-shadow: 0 12px 28px rgba(0,0,0,.22);
-        transition: transform .16s ease, border-color .16s ease;
+        display: block; position: relative; min-width: 0; width: 100%;
+        aspect-ratio: 570 / 459; overflow: hidden; border-radius: 9%;
+        text-decoration: none; background: transparent;
+        transition: transform .16s ease;
       }
-      .lony-dashboard a.lony-card:active { transform: scale(.98); }
-      .lony-dashboard a.lony-card:hover { border-color: rgba(255,255,255,.78); }
-      .lony-dashboard .lony-card::before {
-        content: ''; position: absolute; inset: 0; z-index: -2;
-        background-image: var(--tile-image); background-size: cover;
-        background-position: center center;
-      }
-      .lony-dashboard .lony-card::after {
-        content: ''; position: absolute; inset: 0; z-index: -1;
-        background: linear-gradient(180deg,rgba(4,31,20,0) 0%,rgba(4,31,20,.16) 37%,rgba(3,32,20,.93) 100%);
-      }
-      .lony-dashboard .lony-card--inactive { opacity: .77; cursor: default; }
-      .lony-dashboard .lony-card--inactive::after {
-        background: linear-gradient(180deg,rgba(12,35,26,.08),rgba(5,31,21,.92));
-      }
-      .lony-dashboard .lony-card-icon {
-        display: grid; place-items: center; width: 43px; height: 43px;
-        margin-bottom: 13px; border: 2px solid rgba(255,255,255,.94);
-        border-radius: 50%; font-size: 29px; line-height: 1; font-weight: 500;
-      }
-      .lony-dashboard .lony-card-heading {
-        display: flex; align-items: center; justify-content: space-between; gap: 4px;
-        font-size: clamp(17px,4.5vw,23px); font-weight: 800; line-height: 1.2;
-        white-space: nowrap;
-      }
-      .lony-dashboard .lony-card-arrow { font-size: 25px; font-weight: 300; opacity: .95; }
-      .lony-dashboard .lony-card-subtitle {
-        margin-top: 5px; color: rgba(255,255,255,.81);
-        font-size: clamp(11px,3.1vw,14px); line-height: 1.3;
-      }
+      .lony-dashboard .lony-card--short { aspect-ratio: 570 / 419; }
       .lony-dashboard .lony-card--wide {
-        grid-column: 1 / -1; min-height: 104px; padding: 16px 19px;
-        flex-direction: row; align-items: center; justify-content: flex-start; gap: 15px;
+        grid-column: 1 / -1; aspect-ratio: 1176 / 232;
+        border-radius: 5% / 24%;
       }
-      .lony-dashboard .lony-card--wide::before { background-position: center 55%; }
-      .lony-dashboard .lony-card--wide::after {
-        background: linear-gradient(90deg,rgba(3,31,21,.93),rgba(4,37,25,.28));
+      .lony-dashboard .lony-card img {
+        width: 100%; height: 100%; display: block; object-fit: fill;
       }
-      .lony-dashboard .lony-card--wide .lony-card-icon { flex-shrink: 0; margin: 0; }
-      .lony-dashboard .lony-card--wide .lony-card-content { flex: 1; min-width: 0; }
-      .lony-dashboard .lony-card--wide .lony-card-arrow { margin-left: auto; }
+      .lony-dashboard a.lony-card:hover { transform: translateY(-2px); }
+      .lony-dashboard a.lony-card:active { transform: scale(.98); }
+      .lony-dashboard .lony-card--inactive { cursor: default; }
       .lony-dashboard .lony-card:focus-visible { outline: 3px solid #e5d49b; outline-offset: 3px; }
-      @media (max-width: 360px) {
-        .lony-dashboard .lony-tiles { gap: 9px; }
-        .lony-dashboard .lony-card { padding: 12px; min-height: 164px; border-radius: 18px; }
-        .lony-dashboard .lony-card-heading { font-size: 16px; }
-        .lony-dashboard .lony-card-icon { width: 37px; height: 37px; font-size: 25px; }
+      .lony-dashboard .sr-only {
+        position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+        overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;
       }
       @media (min-width: 600px) {
         .lony-dashboard { border-left: 1px solid rgba(255,255,255,.06); border-right: 1px solid rgba(255,255,255,.06); }
@@ -170,21 +134,17 @@ export default function Dashboard() {
     <h1 style={{marginBottom:8}}>Ahoj, {nickname}!</h1>
     <p style={{color:'#d9e7b5',marginBottom:24}}>Tvůj golfový přehled</p>
     <div className="lony-tiles">
-      {items.map(item => {
-        const wide = item.label === 'Historie';
-        const cardClass = `lony-card${wide ? ' lony-card--wide' : ''}${item.inactive ? ' lony-card--inactive' : ''}`;
-        const contents = <>
-          <span className="lony-card-icon" aria-hidden="true">{item.icon}</span>
-          <span className="lony-card-content">
-            <span className="lony-card-heading">{item.label}{!wide && !item.inactive && <span className="lony-card-arrow" aria-hidden="true">›</span>}</span>
-            <span className="lony-card-subtitle" style={{display:'block'}}>{item.subtitle}</span>
-          </span>
-          {wide && <span className="lony-card-arrow" aria-hidden="true">›</span>}
+      {items.map((item, index) => {
+        const wide = index === 4;
+        const short = index === 2 || index === 3;
+        const cardClass = `lony-card${wide ? ' lony-card--wide' : ''}${short ? ' lony-card--short' : ''}${item.inactive ? ' lony-card--inactive' : ''}`;
+        const content = <>
+          <img src={item.image} alt={`${item.label} – ${index === 0 ? 'Žádná rozehraná hra' : item.status}`} draggable={false} />
+          <span className="sr-only">{item.status}</span>
         </>;
-        const cardStyle = { '--tile-image': `url("${item.image}")` } as CSSProperties;
         return item.href && !item.inactive ?
-          <Link key={item.label} href={item.href} className={cardClass} style={cardStyle}>{contents}</Link> :
-          <div key={item.label} className={cardClass} style={cardStyle} aria-disabled="true">{contents}</div>;
+          <Link key={item.label} href={item.href} className={cardClass} aria-label={`${item.label}: ${item.status}`}>{content}</Link> :
+          <div key={item.label} className={cardClass} aria-label={`${item.label}: ${item.status}`} aria-disabled="true">{content}</div>;
       })}
     </div>
     {activeError && <p role="alert" style={{color:'#f9c8b7',marginTop:12}}>Aktivní hra: {activeError}</p>}
