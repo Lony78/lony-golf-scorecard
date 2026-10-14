@@ -62,11 +62,11 @@ export default function Dashboard() {
   async function logout() { await supabase().auth.signOut(); router.replace('/login'); }
   if (loading) return <main>Ověřuji přihlášení…</main>;
   const items = [
-    { label: 'Aktivní hra', href: active && !activeLoading && !activeError ? '/games/' + active.id : '', image: '/dashboard-approved/01_aktivni_hra.png', inactive: !active || activeLoading || Boolean(activeError), status: activeLoading ? 'Načítám aktivní hru' : activeError ? 'Aktivní hru nelze načíst' : active ? 'Hra právě probíhá' : 'Žádná rozehraná hra' },
-    { label: 'Nová hra', href: '/games/new', image: '/dashboard-approved/02_nova_hra.png', inactive: false, status: 'Založ novou hru' },
-    { label: 'Moje hry', href: '/games', image: '/dashboard-approved/03_moje_hry.png', inactive: false, status: 'Přehled a výsledky' },
-    { label: 'Žebříček', href: '', image: '/dashboard-approved/04_zebricek.png', inactive: true, status: 'Připravujeme' },
-    { label: 'Historie', href: '/history', image: '/dashboard-approved/05_historie.png', inactive: false, status: 'Tvoje odehrané hry' },
+    { label: 'Aktivní hra', href: active && !activeLoading && !activeError ? '/games/' + active.id : '', image: '/01_aktivni_hra.png', inactive: !active || activeLoading || Boolean(activeError), status: activeLoading ? 'Načítám aktivní hru' : activeError ? 'Aktivní hru nelze načíst' : active ? 'Hra právě probíhá' : 'Žádná rozehraná hra' },
+    { label: 'Nová hra', href: '/games/new', image: '/02_nova_hra.png', inactive: false, status: 'Založ novou hru' },
+    { label: 'Moje hry', href: '/games', image: '/03_moje_hry.png', inactive: false, status: 'Přehled a výsledky' },
+    { label: 'Žebříček', href: '', image: '/04_zebricek.png', inactive: true, status: 'Připravujeme' },
+    { label: 'Historie', href: '/history', image: '/05_historie.png', inactive: false, status: 'Tvoje odehrané hry' },
   ];
   return <main className="lony-dashboard">
     <style>{`
