@@ -377,11 +377,33 @@ export default function GameDetail() {
     finally { savingRef.current = false; setBusy(false); }
   }
 
+  // Průběžné skóre vůči PAR: pouze jamky se známým počtem ran.
+  // Zvednutý míč (X) znamená, že přesný celkový rozdíl nelze určit.
+  function scoreToPar(member: Member): { value: number | null; hasPickedUp: boolean } {
+    let strokes = 0;
+    let par = 0;
+    let recorded = 0;
+    for (const hole of visible) {
+      const score = scores[member.id]?.[hole.hole_number];
+      if (!score) continue;
+      if (score.picked_up) return { value: null, hasPickedUp: true };
+      if (score.strokes == null) continue;
+      const ownPar = memberHole(member, hole.hole_number)?.par ?? hole.par;
+      strokes += score.strokes;
+      par += ownPar;
+      recorded++;
+    }
+    return { value: recorded > 0 ? strokes - par : null, hasPickedUp: false };
+  }
+
   function renderPlayerCard(cardMember: Member, animatedStyle?: { transform: string; transition: string; position?: 'absolute' | 'relative' }) {
     const cardIndex = Math.max(0, members.findIndex(member => member.id === cardMember.id));
     const colors = playerColors[cardIndex % playerColors.length];
     const cardScore = activeHole ? scores[cardMember.id]?.[activeHole.hole_number] : undefined;
     const cardCompleted = visible.filter(h => Boolean(scores[cardMember.id]?.[h.hole_number])).length;
+    const relativePar = scoreToPar(cardMember);
+    const parLabel = relativePar.hasPickedUp ? "—" : relativePar.value === null ? "—" : relativePar.value === 0 ? "E" : relativePar.value > 0 ? `+${relativePar.value}` : String(relativePar.value);
+    const parColor = relativePar.value === null ? "#64776e" : relativePar.value > 0 ? "#b91c1c" : relativePar.value < 0 ? "#167a4b" : "#123d2b";
     return <div key={cardMember.id} className="mobile-card swipe-player-area" style={{ background: colors.light, border: `2px solid ${colors.border}`, margin: 0, width: '100%', boxSizing: 'border-box', position: animatedStyle?.position || 'relative', inset: animatedStyle?.position === 'absolute' ? 0 : undefined, transform: animatedStyle?.transform, transition: animatedStyle?.transition, willChange: 'transform' }}>
           <div className="mobile-nav">
             <strong>Jamka {activeHole?.hole_number ?? '–'} / {expected}</strong>
@@ -397,7 +419,13 @@ export default function GameDetail() {
                   <span className="mobile-player-avatar mobile-player-avatar-fallback" aria-hidden="true">{cardMember.nickname.trim().charAt(0).toUpperCase() || '⛳'}</span>}
                 <div className="mobile-player-details"><strong>{cardMember.nickname || 'Moje skóre'}</strong><div className="mobile-sub">Herní HCP {playingHandicap(cardMember) ?? '–'}</div></div>
               </div>
-              <div style={{ textAlign: 'right' }}><strong>{cardMember ? totalPoints(cardMember) ?? '–' : '–'}</strong><div className="mobile-sub">Celkem bodů</div></div>
+              <div style={{ textAlign: 'right', flexShrink: 0, minWidth: 112 }}>
+                <div className="mobile-sub" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>Skóre vůči PAR</div>
+                <div style={{ color: parColor, fontSize: 30, lineHeight: 1.15, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }} aria-label={`Skóre vůči PAR ${parLabel}`}>{parLabel}</div>
+                <div style={{ borderTop: '1px solid rgba(18,61,43,.14)', margin: '7px 0 5px' }} />
+                <strong>{cardMember ? totalPoints(cardMember) ?? '–' : '–'}</strong>
+                <div className="mobile-sub">Celkem bodů</div>
+              </div>
             </div>
             <div className="mobile-stepper">
               <button type="button" aria-label="Odebrat ránu" disabled={!myMember || Boolean(myMember.finished_at) || !cardMember || Boolean(cardMember.finished_at) || busy || visible.length !== expected || !cardScore?.strokes || cardScore.strokes <= 1} onClick={() => void save(activeHole.hole_number, String((cardScore?.strokes || 1) - 1), cardMember)}>−</button>
