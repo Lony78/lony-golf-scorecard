@@ -9,10 +9,6 @@ type Membership = { id: string; game_id: string; finished_at: string | null };
 type Game = { id: string; name: string; play_date: string; status: string; scoring: string; holes_count: number };
 type Entry = { game: Game; membershipId: string };
 
-function ExitIcon() {
-  return <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/><path d="M12 3h6a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3h-6"/></svg>;
-}
-
 export default function Games() {
   const router = useRouter();
   const [entries, setEntries] = useState<Entry[]>([]);
@@ -58,6 +54,7 @@ export default function Games() {
     setError('');
     try {
       const client = supabase();
+      // Smazání vlastních skóre před odstraněním účasti kvůli vazbě scores -> game_players.
       const { error: scoresError } = await client.from('scores').delete()
         .eq('game_player_id', entry.membershipId);
       if (scoresError) throw scoresError;
@@ -72,44 +69,95 @@ export default function Games() {
     } finally { setLeaving(null); }
   }
 
-  return <main className="my-games-v14">
-    <div className="my-games-hero">
-      <p className="my-games-brand">LONY GOLF SCORECARD</p>
-      <h1>Moje hry</h1>
-      <p className="my-games-description">Plánované a rozehrané hry. Dokončené najdeš v Historii.</p>
-    </div>
-    <Link className="my-games-create" href="/games/new"><span className="my-games-plus" aria-hidden="true">+</span><span>Vytvořit novou hru</span><span className="my-games-arrow" aria-hidden="true">→</span></Link>
-    {loading && <p className="my-games-status">Načítám hry…</p>}
-    {error && <p className="my-games-error" role="alert">{error}</p>}
-    {!loading && !error && entries.length === 0 && <div className="my-games-empty">Nemáš žádnou plánovanou ani rozehranou hru. <Link href="/history">Zobrazit historii</Link></div>}
-    <div className="my-games-list">
-      {entries.map(entry => <article key={entry.game.id} className="my-games-card">
-        <Link href={'/games/' + entry.game.id} className="my-games-card-cover" aria-label={'Otevřít hru ' + entry.game.name}>
-          <span className="my-games-card-text"><strong>{entry.game.name}</strong><span>{entry.game.play_date} · {entry.game.holes_count} jamek · {entry.game.scoring === 'stableford' ? 'Stableford' : 'Na rány'}</span></span>
-          <span className="my-games-cover-arrow" aria-hidden="true">›</span>
-        </Link>
-        <div className="my-games-card-actions">
-          <button type="button" className="my-games-leave" onClick={() => void leave(entry)} disabled={Boolean(leaving)}>
-            <ExitIcon/><span>{leaving === entry.membershipId ? 'Odhlašuji…' : 'Opustit hru'}</span>
-          </button>
-          <span className="my-games-card-hint">Otevři hru klepnutím na fotografii</span>
+
+  return <main className="lony-games">
+    <div className="lony-games-wrap">
+      <header className="lony-games-hero">
+        <p className="lony-games-brand">LONY GOLF SCORECARD</p>
+        <h1>Moje hry</h1>
+        <p className="lony-games-description">Plánované a rozehrané hry. Dokončené najdeš v Historii.</p>
+        <div className="lony-games-landscape" aria-hidden="true">
+          <span className="lony-games-hill lony-games-hill-back" />
+          <span className="lony-games-hill lony-games-hill-front" />
+          <span className="lony-games-flag">⚑</span>
         </div>
-      </article>)}
+      </header>
+
+      <Link className="lony-games-create" href="/games/new">
+        <span className="lony-games-create-icon" aria-hidden="true">+</span>
+        <span>Vytvořit novou hru</span>
+        <span className="lony-games-arrow" aria-hidden="true">→</span>
+      </Link>
+
+      {loading && <div className="lony-games-notice">Načítám hry…</div>}
+      {error && <div className="lony-games-notice lony-games-error" role="alert">{error}</div>}
+      {!loading && !error && entries.length === 0 && (
+        <div className="lony-games-notice">Zatím nemáš žádnou plánovanou ani rozehranou hru. <Link href="/history">Zobrazit historii</Link></div>
+      )}
+
+      <section className="lony-games-list" aria-label="Plánované a rozehrané hry">
+        {entries.map(entry => (
+          <article className="lony-games-card" key={entry.game.id}>
+            <Link className="lony-games-card-link" href={'/games/' + entry.game.id} aria-label={'Otevřít hru ' + entry.game.name}>
+              <span className="lony-games-thumb" aria-hidden="true" />
+              <span className="lony-games-card-info">
+                <strong>{entry.game.name}</strong>
+                <span className="lony-games-meta"><span aria-hidden="true">▦</span> {entry.game.play_date} <span className="lony-games-dot">·</span> {entry.game.holes_count} jamek</span>
+                <span className="lony-games-meta"><span aria-hidden="true">⚑</span> {entry.game.scoring === 'stableford' ? 'Stableford' : 'Na rány'}</span>
+              </span>
+              <span className="lony-games-chevron" aria-hidden="true">›</span>
+            </Link>
+            <div className="lony-games-card-footer">
+              <button className="lony-games-leave" type="button" onClick={() => void leave(entry)} disabled={Boolean(leaving)}>
+                <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></svg>
+                {leaving === entry.membershipId ? 'Odhlašuji…' : 'Opustit hru'}
+              </button>
+              <span className="lony-games-footer-hint">Otevři kartu pro pokračování <span aria-hidden="true">↗</span></span>
+            </div>
+          </article>
+        ))}
+      </section>
+
+      <Link href="/dashboard" className="lony-games-back"><span aria-hidden="true">←</span> Zpět na přehled</Link>
     </div>
-    <Link href="/dashboard" className="my-games-back"><span aria-hidden="true">←</span> Zpět na přehled</Link>
+    <div className="lony-games-bottom-landscape" aria-hidden="true"><span /></div>
     <style jsx global>{`
-      main.my-games-v14{position:relative;isolation:isolate;max-width:560px;min-height:100dvh;padding:80px 20px 100px;color:#fff;background:#062c20;overflow:hidden}
-      .my-games-v14:before{content:"";position:absolute;z-index:-1;inset:0 0 auto;height:490px;background:linear-gradient(90deg,rgba(3,38,27,.9) 0%,rgba(3,38,27,.53) 58%,rgba(3,38,27,.16) 100%),linear-gradient(0deg,#062c20 0%,transparent 62%),url('/games-scenery.jpg') center 28%/cover no-repeat;pointer-events:none}
-      .my-games-hero{margin-bottom:26px}.my-games-brand{font-size:11px;letter-spacing:3px;font-weight:750;color:#e1e9b8;margin:0 0 10px}.my-games-hero h1{font-size:clamp(36px,9vw,47px);line-height:1.12;letter-spacing:-1px;margin:0 0 24px;color:white}.my-games-description{color:#e1e9df;font-size:14px;line-height:1.5;margin:0;max-width:440px}
-      .my-games-create{display:flex;align-items:center;gap:15px;min-height:67px;padding:12px 18px;border-radius:17px;background:linear-gradient(110deg,#d9e9b3,#e6f0c8);color:#073426;text-decoration:none;font-weight:800;font-size:clamp(15px,4vw,19px);box-shadow:0 8px 20px rgba(0,0,0,.12)}
-      .my-games-plus{display:grid;place-items:center;flex:none;width:39px;height:39px;border-radius:50%;background:#063b2a;color:#e5f5c2;font-size:30px;font-weight:400;line-height:1}.my-games-arrow{margin-left:auto;font-size:29px;font-weight:400}
-      .my-games-list{display:grid;gap:18px;margin-top:19px}.my-games-card{border-radius:21px;overflow:hidden;background:#fff;box-shadow:0 12px 32px rgba(0,0,0,.16);border:1px solid rgba(255,255,255,.45)}
-      .my-games-card-cover{position:relative;display:flex;align-items:flex-end;min-height:182px;padding:22px 46px 19px 20px;background:linear-gradient(0deg,rgba(1,34,23,.95) 0%,rgba(1,34,23,.3) 52%,rgba(1,34,23,.03) 100%),url('/games-scenery.jpg') center 51%/cover no-repeat;color:#fff;text-decoration:none}
-      .my-games-card-text{display:grid;gap:5px;min-width:0}.my-games-card-text strong{font-size:clamp(22px,6vw,29px);line-height:1.12;overflow-wrap:anywhere}.my-games-card-text>span{font-size:clamp(12px,3.4vw,15px);color:#e1e7e0;line-height:1.4}.my-games-cover-arrow{position:absolute;right:18px;bottom:29px;font-size:43px;line-height:1}
-      .my-games-card-actions{display:flex;align-items:center;gap:12px;min-height:84px;padding:15px 18px;color:#123d2b}.my-games-leave{display:inline-flex;align-items:center;justify-content:center;gap:9px;flex:none;min-height:46px;padding:10px 13px;background:#fff4f4;color:#99282e;border:1px solid #e5b6b9;border-radius:13px;font-size:15px;font-weight:750;cursor:pointer}.my-games-leave:disabled{opacity:.5;cursor:wait}.my-games-card-hint{font-size:11px;color:#60776a;line-height:1.4}
-      .my-games-back{display:inline-flex;align-items:center;justify-content:center;gap:13px;margin-top:24px;min-height:51px;padding:12px 21px;border-radius:999px;background:#e8f3ec;color:#123e2e;text-decoration:none;font-weight:750;font-size:15px;border:1px solid #d6e8db}.my-games-back span{font-size:23px;line-height:1}
-      .my-games-status,.my-games-empty,.my-games-error{margin-top:20px;padding:19px;border-radius:17px;background:#edf6ef;color:#173f2e;line-height:1.5}.my-games-empty a{color:#196843;font-weight:700}.my-games-error{background:#fff1f1;color:#8f2525}
-      @media(max-width:380px){.my-games-v14 .my-games-card-hint{display:none}.my-games-card-actions{min-height:75px}.my-games-description{font-size:13px}}
+      .lony-games { position:relative; isolation:isolate; min-height:100dvh; overflow:hidden; background:radial-gradient(ellipse at 70% 18%,#14583c 0%,#083c2a 36%,#062b20 74%,#05281e 100%); color:#fff; padding: max(34px,env(safe-area-inset-top)) 20px max(55px,env(safe-area-inset-bottom)); box-sizing:border-box; font-family:inherit; }
+      .lony-games * {box-sizing:border-box}
+      .lony-games-wrap {max-width:530px;margin:0 auto;position:relative;z-index:2}
+      .lony-games-hero {position:relative;padding:20px 0 25px;min-height:230px}
+      .lony-games-brand {font-size:12px;font-weight:750;letter-spacing:3px;color:#e2eab9;margin:0 0 26px}
+      .lony-games-hero h1 {position:relative;z-index:2;font-size:clamp(34px,8vw,46px);line-height:1.1;letter-spacing:-1px;margin:0 0 27px;color:white}
+      .lony-games-description {position:relative;z-index:2;font-size:14px;line-height:1.5;color:#c0d5c9;max-width:400px;margin:0}
+      .lony-games-landscape {position:absolute;z-index:1;right:-20px;top:18px;width:70%;height:165px;opacity:.85;overflow:hidden;pointer-events:none;mask-image:linear-gradient(to right,transparent,black 28%)}
+      .lony-games-hill {position:absolute;display:block;left:0;right:-30px;border-radius:50% 50% 0 0}
+      .lony-games-hill-back {height:95px;bottom:15px;background:#2d6d3f;transform:rotate(-7deg) translateY(45px)}
+      .lony-games-hill-front {height:80px;bottom:-12px;background:#4e8c42;transform:rotate(5deg) translateY(36px)}
+      .lony-games-flag {position:absolute;right:24%;top:21px;font-size:50px;color:#e8efdf;text-shadow:0 0 8px #13402d}
+      .lony-games-create {display:flex;align-items:center;gap:15px;min-height:70px;padding:14px 19px;border-radius:18px;background:linear-gradient(110deg,#e1efc1,#cde3aa);color:#073b29;text-decoration:none;font-weight:800;font-size:clamp(17px,4.4vw,21px);box-shadow:0 8px 26px #00190e30}
+      .lony-games-create-icon {display:grid;place-items:center;flex:0 0 43px;height:43px;border-radius:50%;background:#043b2a;color:#e3efc7;font-size:34px;font-weight:400;line-height:1}
+      .lony-games-arrow {margin-left:auto;font-size:29px;font-weight:400}
+      .lony-games-list {display:grid;gap:16px;margin-top:20px}
+      .lony-games-card {border-radius:22px;background:linear-gradient(125deg,#fff,#e9f4ec);color:#073a2b;overflow:hidden;box-shadow:0 12px 34px #001b102d;border:1px solid #ffffffa8}
+      .lony-games-card-link {display:flex;align-items:center;gap:14px;padding:17px 15px 12px;text-decoration:none;color:inherit;min-height:118px}
+      .lony-games-thumb {display:block;flex:0 0 92px;height:90px;border-radius:15px;background:#2c6946 url('/games-scenery.jpg') center/cover no-repeat;box-shadow:inset 0 0 0 1px #ffffff5c}
+      .lony-games-card-info {min-width:0;flex:1;display:flex;flex-direction:column;gap:7px}
+      .lony-games-card-info strong {font-size:clamp(17px,4.5vw,22px);line-height:1.2;overflow-wrap:anywhere}
+      .lony-games-meta {font-size:12px;color:#5e766b;line-height:1.35}
+      .lony-games-dot {padding:0 3px}
+      .lony-games-chevron {font-size:34px;line-height:1;color:#0c4d34}
+      .lony-games-card-footer {display:flex;align-items:center;gap:10px;padding:0 15px 16px}
+      .lony-games-leave {display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:43px;padding:10px 12px;border-radius:12px;border:1px solid #e6a9ab;background:#fff1f1;color:#a0272e;font-weight:750;font-size:13px;cursor:pointer;white-space:nowrap}
+      .lony-games-leave:disabled {opacity:.6;cursor:wait}
+      .lony-games-footer-hint {margin-left:auto;color:#5e766b;font-size:11px;text-align:right}
+      .lony-games-back {display:inline-flex;align-items:center;gap:11px;margin-top:28px;padding:14px 21px;border-radius:999px;background:#edf6ef;color:#073a2b;font-size:15px;font-weight:750;text-decoration:none}
+      .lony-games-back span {font-size:23px;font-weight:400}
+      .lony-games-notice {margin-top:18px;padding:18px;border-radius:17px;background:#eff7f0;color:#103e2c;font-size:14px}
+      .lony-games-notice a {color:#0b6b43;font-weight:750}
+      .lony-games-error {color:#99252b;background:#fff0f0}
+      .lony-games-bottom-landscape {position:absolute;z-index:0;bottom:-80px;left:-10%;width:120%;height:220px;background:#164b32;clip-path:polygon(0 50%,20% 59%,43% 49%,68% 26%,100% 38%,100% 100%,0 100%);opacity:.58}
+      .lony-games-bottom-landscape span {position:absolute;inset:70px 0 0;background:#39703f;clip-path:polygon(0 42%,26% 13%,56% 50%,82% 28%,100% 42%,100% 100%,0 100%);opacity:.4}
+      @media(max-width:390px) {.lony-games {padding-left:14px;padding-right:14px}.lony-games-card-link{gap:10px;padding-left:12px;padding-right:12px}.lony-games-thumb{flex-basis:78px;height:83px}.lony-games-card-footer{padding-left:12px;padding-right:12px}.lony-games-footer-hint{font-size:10px}}
     `}</style>
   </main>;
 }
