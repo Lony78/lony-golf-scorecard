@@ -70,41 +70,25 @@ export default function Games() {
 
   async function leave(entry: Entry) {
     if (!userId || leaving) return;
-    if (!window.confirm(`Opravdu chceš opustit hru „${entry.game.name}“?\n\nOdhlásíš se z flightu a tvoje dosavadní zapsané výsledky v této hře budou odstraněny. Ostatní hráči ve hře zůstanou.`)) return;
+    if (entry.game.status !== 'active' && !(stats[entry.game.id]?.completed !== null && (stats[entry.game.id]?.completed ?? 0) > 0)) {
+      setError('Opustit hru lze pouze během aktivní, rozehrané hry.');
+      return;
+    }
+    if (!window.confirm(`Opravdu chceš předčasně ukončit svou účast ve hře „${entry.game.name}“?\n\nTvoje dosavadní výsledky zůstanou uložené v Historii. Ostatní hráči mohou pokračovat. Tento krok nelze vrátit.`)) return;
     setLeaving(entry.membershipId);
     setError('');
     try {
-      const client = supabase();
-      // Smazání vlastních skóre před odstraněním účasti kvůli vazbě scores -> game_players.
-      const { error: scoresError } = await client.from('scores').delete()
-        .eq('game_player_id', entry.membershipId);
-      if (scoresError) throw scoresError;
-      const { data: removed, error: memberError } = await client.from('game_players')
-        .delete().eq('id', entry.membershipId).eq('player_id', userId)
+      const finishedAt = new Date().toISOString();
+      const { data, error: memberError } = await supabase().from('game_players')
+        .update({ finished_at: finishedAt, finish_reason: 'Odstoupení ze hry' })
+        .eq('id', entry.membershipId).eq('player_id', userId)
         .is('finished_at', null).select('id');
       if (memberError) throw memberError;
-      if (!removed?.length) throw new Error('Odhlášení se nepotvrdilo. Obnov stránku a zkus to znovu.');
+      if (!data?.length) throw new Error('Ukončení účasti se nepotvrdilo. Obnov stránku.');
       setEntries(prev => prev.filter(e => e.membershipId !== entry.membershipId));
+      router.push('/history');
     } catch (e) {
-      setError((e instanceof Error ? e.message : 'Odhlášení se nezdařilo.') + ' Pokud jde o oprávnění databáze, bude potřeba upravit pravidla Supabase.');
-    } finally { setLeaving(null); }
-  }
-
-  async function cancelGame(entry: Entry) {
-    if (!userId || leaving) return;
-    if (stats[entry.game.id]?.organizer !== true) { await leave(entry); return; }
-    if (!window.confirm(`Opravdu chceš ZRUŠIT CELOU HRU „${entry.game.name}“?\n\nTím odstraníš hru a její výsledky všem hráčům. Tuto akci nelze vrátit.`)) return;
-    setLeaving(entry.membershipId);
-    setError('');
-    try {
-      const client = supabase();
-      const { data, error: deleteError } = await client.from('games').delete()
-        .eq('id', entry.game.id).eq('organizer_id', userId).select('id');
-      if (deleteError) throw deleteError;
-      if (!data?.length) throw new Error('Hru se nepodařilo zrušit. Zkontroluj oprávnění.');
-      setEntries(prev => prev.filter(e => e.game.id !== entry.game.id));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Hru se nepodařilo zrušit.');
+      setError(e instanceof Error ? e.message : 'Účast se nepodařilo ukončit.');
     } finally { setLeaving(null); }
   }
 
@@ -128,10 +112,10 @@ export default function Games() {
             <span className="v17-chevron">›</span>
           </Link>
           <div className="v17-cardbottom">
-            <button type="button" className="v17-cancel" disabled={Boolean(leaving)} onClick={() => void cancelGame(entry)}>
-              <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2m3 0-1 15H6L5 6m5 4v7m4-7v7"/></svg>
-              {leaving === entry.membershipId ? 'Zpracovávám…' : stats[entry.game.id]?.organizer === true ? 'Zrušit hru' : 'Opustit hru'}
-            </button>
+            {(entry.game.status === 'active' || (stats[entry.game.id]?.completed ?? 0) > 0) && <button type="button" className="v17-cancel" disabled={Boolean(leaving)} onClick={() => void leave(entry)}>
+              <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 6l-6 6 6 6M3 12h13m2-8h3v16h-3"/></svg>
+              {leaving === entry.membershipId ? 'Ukončuji účast…' : 'Opustit hru'}
+            </button>}
             <span className="v17-stat"><span className="v17-stat-icon">♟</span><strong>{stats[entry.game.id]?.players ?? '–'}</strong><small>hráčů</small></span>
             <span className="v17-stat v17-stat-progress"><span className="v17-stat-icon">⚑</span><strong>{stats[entry.game.id]?.completed ?? '–'} / {entry.game.holes_count}</strong><small>zapsáno</small></span>
           </div>
