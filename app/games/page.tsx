@@ -6,8 +6,8 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '../../lib/supabase';
 
 type Membership = { id: string; game_id: string; finished_at: string | null };
-type Game = { id: string; name: string; play_date: string; status: string; scoring: string; holes_count: number };
-type Entry = { game: Game; membershipId: string };
+type Game = { id: string; name: string; play_date: string; status: string; scoring: string; holes_count: number; organizer_id: string };
+type Entry = { game: Game; membershipId: string; players: number; completed: number };
 
 export default function Games() {
   const router = useRouter();
@@ -32,13 +32,23 @@ export default function Games() {
         const list = (memberships || []) as Membership[];
         if (!list.length) { if (active) setEntries([]); return; }
         const { data: games, error: gameError } = await client.from('games')
-          .select('id,name,play_date,status,scoring,holes_count')
+          .select('id,name,play_date,status,scoring,holes_count,organizer_id')
           .in('id', list.map(m => m.game_id)).order('play_date', { ascending: false });
         if (gameError) throw gameError;
         const lookup = new Map(list.map(m => [m.game_id, m.id]));
-        if (active) setEntries(((games || []) as Game[])
-          .filter(g => g.status !== 'cancelled' && g.status !== 'finished' && lookup.has(g.id))
-          .map(game => ({ game, membershipId: lookup.get(game.id)! })));
+        const visible = ((games || []) as Game[]).filter(g => g.status !== 'cancelled' && g.status !== 'finished' && lookup.has(g.id));
+        const ids = visible.map(g => g.id);
+        const [{ data: allPlayers, error: playersError }, { data: scores, error: scoresError }] = await Promise.all([
+          client.from('game_players').select('game_id,player_id').in('game_id',ids),
+          client.from('scores').select('game_id,player_id,hole_number,strokes,picked_up').in('game_id',ids).eq('player_id',user.id),
+        ]);
+        if (playersError) throw playersError;
+        if (scoresError) throw scoresError;
+        if (active) setEntries(visible.map(game => ({
+          game, membershipId: lookup.get(game.id)!,
+          players: (allPlayers || []).filter(p => p.game_id === game.id).length,
+          completed: new Set((scores || []).filter(sc => sc.game_id === game.id && (sc.strokes !== null || sc.picked_up)).map(sc => sc.hole_number)).size
+        })));
       } catch (e) {
         if (active) setError(e instanceof Error ? e.message : 'Hry se nepodařilo načíst.');
       } finally { if (active) setLoading(false); }
@@ -47,117 +57,112 @@ export default function Games() {
     return () => { active = false; };
   }, [router]);
 
-  async function leave(entry: Entry) {
+  async function cancel(entry: Entry) {
     if (!userId || leaving) return;
-    if (!window.confirm(`Opravdu chceš opustit hru „${entry.game.name}“?\n\nOdhlásíš se z flightu a tvoje dosavadní zapsané výsledky v této hře budou odstraněny. Ostatní hráči ve hře zůstanou.`)) return;
+    const organizer = entry.game.organizer_id === userId;
+    const warning = organizer
+      ? `Opravdu chceš ZRUŠIT CELOU HRU „${entry.game.name}“?\\n\\nHra a všechny zapsané výsledky všech hráčů budou trvale odstraněny. Tuto akci nelze vrátit.`
+      : `Nejsi organizátorem hry „${entry.game.name}“. Můžeš pouze opustit svoji účast.\\n\\nTvoje vlastní výsledky budou odstraněny, ostatní hráči zůstanou. Pokračovat?`;
+    if (!window.confirm(warning)) return;
     setLeaving(entry.membershipId);
     setError('');
     try {
       const client = supabase();
-      // Smazání vlastních skóre před odstraněním účasti kvůli vazbě scores -> game_players.
-      const { error: scoresError } = await client.from('scores').delete()
-        .eq('game_player_id', entry.membershipId);
-      if (scoresError) throw scoresError;
-      const { data: removed, error: memberError } = await client.from('game_players')
-        .delete().eq('id', entry.membershipId).eq('player_id', userId)
-        .is('finished_at', null).select('id');
-      if (memberError) throw memberError;
-      if (!removed?.length) throw new Error('Odhlášení se nepotvrdilo. Obnov stránku a zkus to znovu.');
-      setEntries(prev => prev.filter(e => e.membershipId !== entry.membershipId));
+      if (organizer) {
+        const { data, error: deleteError } = await client.from('games').delete()
+          .eq('id',entry.game.id).eq('organizer_id',userId).select('id');
+        if (deleteError) throw deleteError;
+        if (!data?.length) throw new Error('Zrušení hry se nepodařilo. Zkontroluj oprávnění.');
+        setEntries(prev => prev.filter(e => e.game.id !== entry.game.id));
+      } else {
+        const { error: scoresError } = await client.from('scores').delete()
+          .eq('game_id',entry.game.id).eq('player_id',userId);
+        if (scoresError) throw scoresError;
+        const { data, error: memberError } = await client.from('game_players').delete()
+          .eq('game_id',entry.game.id).eq('player_id',userId).select('game_id');
+        if (memberError) throw memberError;
+        if (!data?.length) throw new Error('Odchod ze hry se nepodařil.');
+        setEntries(prev => prev.filter(e => e.game.id !== entry.game.id));
+      }
     } catch (e) {
-      setError((e instanceof Error ? e.message : 'Odhlášení se nezdařilo.') + ' Pokud jde o oprávnění databáze, bude potřeba upravit pravidla Supabase.');
+      setError(e instanceof Error ? e.message : 'Akce se nepodařila.');
     } finally { setLeaving(null); }
   }
 
 
-  return <main className="lony-games">
-    <div className="lony-games-wrap">
-      <header className="lony-games-hero">
-        <p className="lony-games-brand">LONY GOLF SCORECARD</p>
+  return <main className="lg16">
+    <div className="lg16-inner">
+      <header className="lg16-head">
+        <div className="lg16-art" aria-hidden="true"><span className="lg16-green"/><span className="lg16-flag">⚑</span></div>
+        <div className="lg16-brand">LONY GOLF SCORECARD</div>
         <h1>Moje hry</h1>
-        <p className="lony-games-description">Plánované a rozehrané hry. Dokončené najdeš v Historii.</p>
-        <div className="lony-games-landscape" aria-hidden="true">
-          <span className="lony-games-hill lony-games-hill-back" />
-          <span className="lony-games-hill lony-games-hill-front" />
-          <span className="lony-games-flag">⚑</span>
-        </div>
+        <p>Plánované a rozehrané hry.<br/>Dokončené najdeš v Historii.</p>
       </header>
-
-      <Link className="lony-games-create" href="/games/new">
-        <span className="lony-games-create-icon" aria-hidden="true">+</span>
-        <span>Vytvořit novou hru</span>
-        <span className="lony-games-arrow" aria-hidden="true">→</span>
-      </Link>
-
-      {loading && <div className="lony-games-notice">Načítám hry…</div>}
-      {error && <div className="lony-games-notice lony-games-error" role="alert">{error}</div>}
-      {!loading && !error && entries.length === 0 && (
-        <div className="lony-games-notice">Zatím nemáš žádnou plánovanou ani rozehranou hru. <Link href="/history">Zobrazit historii</Link></div>
-      )}
-
-      <section className="lony-games-list" aria-label="Plánované a rozehrané hry">
-        {entries.map(entry => (
-          <article className="lony-games-card" key={entry.game.id}>
-            <Link className="lony-games-card-link" href={'/games/' + entry.game.id} aria-label={'Otevřít hru ' + entry.game.name}>
-              <span className="lony-games-thumb" aria-hidden="true" />
-              <span className="lony-games-card-info">
-                <strong>{entry.game.name}</strong>
-                <span className="lony-games-meta"><span aria-hidden="true">▦</span> {entry.game.play_date} <span className="lony-games-dot">·</span> {entry.game.holes_count} jamek</span>
-                <span className="lony-games-meta"><span aria-hidden="true">⚑</span> {entry.game.scoring === 'stableford' ? 'Stableford' : 'Na rány'}</span>
-              </span>
-              <span className="lony-games-chevron" aria-hidden="true">›</span>
-            </Link>
-            <div className="lony-games-card-footer">
-              <button className="lony-games-leave" type="button" onClick={() => void leave(entry)} disabled={Boolean(leaving)}>
-                <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></svg>
-                {leaving === entry.membershipId ? 'Odhlašuji…' : 'Opustit hru'}
-              </button>
-              <span className="lony-games-footer-hint">Klepni na kartu pro pokračování</span>
-            </div>
-          </article>
-        ))}
-      </section>
-
-      <Link href="/dashboard" className="lony-games-back"><span aria-hidden="true">←</span> Zpět na přehled</Link>
+      <Link href="/games/new" className="lg16-new"><span className="lg16-plus">+</span><strong>Vytvořit novou hru</strong><span className="lg16-arr">→</span></Link>
+      {loading && <div className="lg16-message">Načítám hry…</div>}
+      {error && <div className="lg16-message lg16-error" role="alert">{error}</div>}
+      {!loading && !error && entries.length === 0 && <div className="lg16-message">Nemáš žádnou rozehranou hru. <Link href="/history">Zobrazit historii</Link></div>}
+      <div className="lg16-list">
+        {entries.map(entry => <article key={entry.game.id} className="lg16-card">
+          <Link className="lg16-top" href={'/games/'+entry.game.id}>
+            <span className="lg16-photo" aria-hidden="true"/>
+            <span className="lg16-info">
+              <strong>{entry.game.name}</strong>
+              <span>▦ &nbsp;{entry.game.play_date}</span>
+              <span>⚑ &nbsp;{entry.game.holes_count} jamek</span>
+              <span>♜ &nbsp;{entry.game.scoring === 'stableford' ? 'Stableford' : 'Na rány'}</span>
+            </span>
+            <span className="lg16-chevron">›</span>
+          </Link>
+          <div className="lg16-bottom">
+            <button type="button" disabled={Boolean(leaving)} onClick={() => void cancel(entry)} className="lg16-cancel">
+              <svg aria-hidden="true" viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M8 6V4h8v2m3 0-1 15H6L5 6m5 4v7m4-7v7"/></svg>
+              {leaving === entry.membershipId ? 'Zpracovávám…' : entry.game.organizer_id === userId ? 'Zrušit hru' : 'Opustit hru'}
+            </button>
+            <span className="lg16-stat"><span className="lg16-people">♟</span><strong>{entry.players}</strong><small>{entry.players === 1 ? 'hráč' : entry.players < 5 ? 'hráči' : 'hráčů'}</small></span>
+            <span className="lg16-stat lg16-progress"><span>⚑</span><strong>{entry.completed} / {entry.game.holes_count}</strong><small>zapsáno</small></span>
+          </div>
+        </article>)}
+      </div>
+      <Link className="lg16-back" href="/dashboard"><span>←</span> Zpět na přehled</Link>
     </div>
-    <div className="lony-games-bottom-landscape" aria-hidden="true"><span /></div>
+    <div className="lg16-land" aria-hidden="true"/>
     <style jsx global>{`
-      .lony-games { width:100%; max-width:520px; margin:0 auto; position:relative; isolation:isolate; min-height:100dvh; overflow:hidden; background:radial-gradient(ellipse at 70% 18%,#14583c 0%,#083c2a 36%,#062b20 74%,#05281e 100%); color:#fff; padding: max(34px,env(safe-area-inset-top)) 20px max(55px,env(safe-area-inset-bottom)); box-sizing:border-box; font-family:inherit; }
-      .lony-games * {box-sizing:border-box}
-      .lony-games-wrap {max-width:530px;margin:0 auto;position:relative;z-index:2}
-      .lony-games-hero {display:block!important;position:relative;padding:20px 0 30px;min-height:225px;text-align:left}
-      .lony-games-brand {display:block;position:relative;z-index:2;font-size:12px;font-weight:750;letter-spacing:3px;color:#e2eab9;margin:0 0 26px}
-      .lony-games-hero h1 {display:block;width:auto;position:relative;z-index:2;font-size:clamp(34px,8vw,46px);line-height:1.1;letter-spacing:-1px;margin:0 0 27px;color:white}
-      .lony-games-description {display:block;width:auto;position:relative;z-index:2;font-size:14px;line-height:1.5;color:#c0d5c9;max-width:400px;margin:0}
-      .lony-games-landscape {position:absolute;z-index:1;right:-20px;top:25px;width:65%;height:160px;opacity:.85;overflow:hidden;pointer-events:none;mask-image:linear-gradient(to right,transparent,black 28%)}
-      .lony-games-hill {position:absolute;display:block;left:0;right:-30px;border-radius:50% 50% 0 0}
-      .lony-games-hill-back {height:95px;bottom:15px;background:#2d6d3f;transform:rotate(-7deg) translateY(45px)}
-      .lony-games-hill-front {height:80px;bottom:-12px;background:#4e8c42;transform:rotate(5deg) translateY(36px)}
-      .lony-games-flag {position:absolute;right:24%;top:21px;font-size:50px;color:#e8efdf;text-shadow:0 0 8px #13402d}
-      .lony-games-create {display:flex;align-items:center;gap:15px;min-height:70px;padding:14px 19px;border-radius:18px;background:linear-gradient(110deg,#e1efc1,#cde3aa);color:#073b29;text-decoration:none;font-weight:800;font-size:clamp(17px,4.4vw,21px);box-shadow:0 8px 26px #00190e30}
-      .lony-games-create-icon {display:grid;place-items:center;flex:0 0 43px;height:43px;border-radius:50%;background:#043b2a;color:#e3efc7;font-size:34px;font-weight:400;line-height:1}
-      .lony-games-arrow {margin-left:auto;font-size:29px;font-weight:400}
-      .lony-games-list {display:grid;gap:16px;margin-top:20px}
-      .lony-games-card {border-radius:22px;background:linear-gradient(125deg,#fff,#e9f4ec);color:#073a2b;overflow:hidden;box-shadow:0 12px 34px #001b102d;border:1px solid #ffffffa8}
-      .lony-games-card-link {display:flex;align-items:center;gap:14px;padding:17px 15px 12px;text-decoration:none;color:inherit;min-height:118px}
-      .lony-games-thumb {display:block;flex:0 0 92px;height:90px;border-radius:15px;background:#2c6946 url('/games-scenery.jpg') center/cover no-repeat;box-shadow:inset 0 0 0 1px #ffffff5c}
-      .lony-games-card-info {min-width:0;flex:1;display:flex;flex-direction:column;gap:7px}
-      .lony-games-card-info strong {font-size:clamp(17px,4.5vw,22px);line-height:1.2;overflow-wrap:anywhere}
-      .lony-games-meta {font-size:12px;color:#5e766b;line-height:1.35}
-      .lony-games-dot {padding:0 3px}
-      .lony-games-chevron {font-size:34px;line-height:1;color:#0c4d34}
-      .lony-games-card-footer {display:flex;align-items:center;gap:10px;padding:0 15px 16px}
-      .lony-games-leave {display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:43px;padding:10px 12px;border-radius:12px;border:1px solid #e6a9ab;background:#fff1f1;color:#a0272e;font-weight:750;font-size:13px;cursor:pointer;white-space:nowrap}
-      .lony-games-leave:disabled {opacity:.6;cursor:wait}
-      .lony-games-footer-hint {margin-left:auto;color:#5e766b;font-size:11px;text-align:right;max-width:150px;line-height:1.3}
-      .lony-games-back {display:inline-flex;align-items:center;gap:11px;margin-top:28px;padding:14px 21px;border-radius:999px;background:#edf6ef;color:#073a2b;font-size:15px;font-weight:750;text-decoration:none}
-      .lony-games-back span {font-size:23px;font-weight:400}
-      .lony-games-notice {margin-top:18px;padding:18px;border-radius:17px;background:#eff7f0;color:#103e2c;font-size:14px}
-      .lony-games-notice a {color:#0b6b43;font-weight:750}
-      .lony-games-error {color:#99252b;background:#fff0f0}
-      .lony-games-bottom-landscape {position:absolute;z-index:0;bottom:-80px;left:-10%;width:120%;height:220px;background:#164b32;clip-path:polygon(0 50%,20% 59%,43% 49%,68% 26%,100% 38%,100% 100%,0 100%);opacity:.58}
-      .lony-games-bottom-landscape span {position:absolute;inset:70px 0 0;background:#39703f;clip-path:polygon(0 42%,26% 13%,56% 50%,82% 28%,100% 42%,100% 100%,0 100%);opacity:.4}
-      @media(max-width:390px) {.lony-games {padding-left:14px;padding-right:14px}.lony-games-card-link{gap:10px;padding-left:12px;padding-right:12px}.lony-games-thumb{flex-basis:78px;height:83px}.lony-games-card-footer{padding-left:12px;padding-right:12px}.lony-games-footer-hint{font-size:10px}}
+      .lg16{min-height:100dvh;position:relative;isolation:isolate;overflow:hidden;background:radial-gradient(ellipse at 66% 18%,#126043 0%,#06412e 48%,#063325 100%);color:white;padding:38px 20px 80px;font-family:inherit}
+      .lg16 *{box-sizing:border-box}
+      .lg16-inner{position:relative;z-index:2;max-width:540px;margin:0 auto}
+      .lg16 .lg16-head{display:block!important;position:relative!important;width:100%!important;min-height:222px!important;margin:0 0 18px!important;padding:0!important;background:none!important;text-align:left!important;overflow:visible!important}
+      .lg16-brand{display:block!important;position:relative;z-index:2;color:#e4e9bb;font-size:12px;letter-spacing:3px;font-weight:750;margin:0 0 26px}
+      .lg16 .lg16-head h1{display:block!important;position:relative;z-index:2;width:auto!important;margin:0 0 18px!important;color:white;font-size:clamp(37px,9vw,49px);line-height:1.12;letter-spacing:-1px}
+      .lg16 .lg16-head p{display:block!important;position:relative;z-index:2;width:auto!important;margin:0!important;color:#b4cfc0;font-size:15px;line-height:1.55}
+      .lg16-art{position:absolute;right:-20px;top:25px;width:58%;height:180px;opacity:.82;overflow:hidden;mask-image:linear-gradient(90deg,transparent,black 35%)}
+      .lg16-green{position:absolute;bottom:0;right:-25%;width:145%;height:65px;background:#48883e;border-radius:90% 20% 0 0;transform:rotate(-5deg)}
+      .lg16-flag{position:absolute;top:4px;right:21%;font-size:65px;color:#d6e7cf}
+      .lg16-new{display:flex;align-items:center;gap:14px;min-height:70px;border-radius:18px;padding:13px 17px;background:linear-gradient(105deg,#e1f0c1,#cfe5ad);color:#063d2a;text-decoration:none;font-size:clamp(16px,4.5vw,21px);box-shadow:0 9px 24px #001e1220}
+      .lg16-plus{display:grid;place-items:center;flex:0 0 45px;height:45px;border-radius:50%;background:#063b2a;color:#e4f0c7;font-size:34px;font-weight:400}
+      .lg16-arr{margin-left:auto;font-size:30px;font-weight:400}
+      .lg16-list{display:grid;gap:17px;margin-top:19px}
+      .lg16-card{background:linear-gradient(115deg,#fff,#e9f5ec);color:#083e2d;border:1px solid #ffffffc2;border-radius:22px;overflow:hidden;padding:15px;box-shadow:0 10px 30px #00231535}
+      .lg16-top{display:flex;gap:15px;align-items:center;color:inherit;text-decoration:none;min-height:130px}
+      .lg16-photo{display:block;flex:0 0 39%;height:126px;border-radius:16px;background:#4c8b4d url('/games-course-v16.webp') center/cover no-repeat}
+      .lg16-info{display:flex;flex-direction:column;gap:7px;min-width:0;flex:1}
+      .lg16-info strong{font-size:clamp(17px,4.7vw,23px);line-height:1.15;overflow-wrap:anywhere}
+      .lg16-info>span{font-size:13px;color:#607c70;line-height:1.25}
+      .lg16-chevron{font-size:30px;line-height:1}
+      .lg16-bottom{border-top:1px solid #dce9df;margin-top:14px;padding-top:12px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+      .lg16-cancel{display:flex;align-items:center;gap:6px;border:1px solid #e9a7ab;background:#fff0f1;color:#aa2630;padding:11px 9px;border-radius:12px;font-weight:750;font-size:12px;white-space:nowrap;cursor:pointer}
+      .lg16-cancel:disabled{opacity:.55}
+      .lg16-stat{display:grid;grid-template-columns:auto auto;column-gap:4px;align-items:center;color:#083c2a}
+      .lg16-stat>span{grid-row:1 / 3;font-size:23px}
+      .lg16-stat strong{font-size:15px;white-space:nowrap;line-height:1.1}
+      .lg16-stat small{color:#779086;font-size:10px}
+      .lg16-progress{border-left:1px solid #cbdcd0;padding-left:10px}
+      .lg16-back{display:inline-flex;align-items:center;gap:12px;margin-top:40px;border-radius:999px;padding:15px 23px;background:#eaf6ec;color:#073d2b;font-weight:750;text-decoration:none}
+      .lg16-back span{font-size:25px;font-weight:400}
+      .lg16-message{background:#eaf6ec;color:#073d2b;padding:17px;border-radius:15px;margin-top:18px}
+      .lg16-error{background:#fff0f0;color:#a02b33}
+      .lg16-land{position:absolute;bottom:-70px;left:-5%;width:110%;height:160px;background:#23623c;clip-path:polygon(0 45%,35% 70%,75% 22%,100% 45%,100% 100%,0 100%);opacity:.55}
+      @media(max-width:390px){.lg16{padding-left:14px;padding-right:14px}.lg16-photo{flex-basis:33%;height:116px}.lg16-top{gap:10px}.lg16-card{padding:12px}.lg16-bottom{gap:5px}.lg16-cancel{font-size:11px;padding:10px 7px}.lg16-progress{padding-left:6px}.lg16-stat strong{font-size:13px}}
     `}</style>
   </main>;
 }
