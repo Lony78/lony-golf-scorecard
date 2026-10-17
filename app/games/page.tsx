@@ -112,7 +112,7 @@ export default function Games() {
                 <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></svg>
                 {leaving === entry.membershipId ? 'Odhlašuji…' : 'Opustit hru'}
               </button>
-              <span className="lony-games-footer-hint">Otevři kartu pro pokračování <span aria-hidden="true">↗</span></span>
+              <span className="lony-games-footer-hint">Klepni na kartu pro pokračování</span>
             </div>
           </article>
         ))}
@@ -122,14 +122,14 @@ export default function Games() {
     </div>
     <div className="lony-games-bottom-landscape" aria-hidden="true"><span /></div>
     <style jsx global>{`
-      .lony-games { position:relative; isolation:isolate; min-height:100dvh; overflow:hidden; background:radial-gradient(ellipse at 70% 18%,#14583c 0%,#083c2a 36%,#062b20 74%,#05281e 100%); color:#fff; padding: max(34px,env(safe-area-inset-top)) 20px max(55px,env(safe-area-inset-bottom)); box-sizing:border-box; font-family:inherit; }
+      .lony-games { width:100%; max-width:520px; margin:0 auto; position:relative; isolation:isolate; min-height:100dvh; overflow:hidden; background:radial-gradient(ellipse at 70% 18%,#14583c 0%,#083c2a 36%,#062b20 74%,#05281e 100%); color:#fff; padding: max(34px,env(safe-area-inset-top)) 20px max(55px,env(safe-area-inset-bottom)); box-sizing:border-box; font-family:inherit; }
       .lony-games * {box-sizing:border-box}
       .lony-games-wrap {max-width:530px;margin:0 auto;position:relative;z-index:2}
-      .lony-games-hero {position:relative;padding:20px 0 25px;min-height:230px}
-      .lony-games-brand {font-size:12px;font-weight:750;letter-spacing:3px;color:#e2eab9;margin:0 0 26px}
-      .lony-games-hero h1 {position:relative;z-index:2;font-size:clamp(34px,8vw,46px);line-height:1.1;letter-spacing:-1px;margin:0 0 27px;color:white}
-      .lony-games-description {position:relative;z-index:2;font-size:14px;line-height:1.5;color:#c0d5c9;max-width:400px;margin:0}
-      .lony-games-landscape {position:absolute;z-index:1;right:-20px;top:18px;width:70%;height:165px;opacity:.85;overflow:hidden;pointer-events:none;mask-image:linear-gradient(to right,transparent,black 28%)}
+      .lony-games-hero {display:block!important;position:relative;padding:20px 0 30px;min-height:225px;text-align:left}
+      .lony-games-brand {display:block;position:relative;z-index:2;font-size:12px;font-weight:750;letter-spacing:3px;color:#e2eab9;margin:0 0 26px}
+      .lony-games-hero h1 {display:block;width:auto;position:relative;z-index:2;font-size:clamp(34px,8vw,46px);line-height:1.1;letter-spacing:-1px;margin:0 0 27px;color:white}
+      .lony-games-description {display:block;width:auto;position:relative;z-index:2;font-size:14px;line-height:1.5;color:#c0d5c9;max-width:400px;margin:0}
+      .lony-games-landscape {position:absolute;z-index:1;right:-20px;top:25px;width:65%;height:160px;opacity:.85;overflow:hidden;pointer-events:none;mask-image:linear-gradient(to right,transparent,black 28%)}
       .lony-games-hill {position:absolute;display:block;left:0;right:-30px;border-radius:50% 50% 0 0}
       .lony-games-hill-back {height:95px;bottom:15px;background:#2d6d3f;transform:rotate(-7deg) translateY(45px)}
       .lony-games-hill-front {height:80px;bottom:-12px;background:#4e8c42;transform:rotate(5deg) translateY(36px)}
@@ -149,7 +149,7 @@ export default function Games() {
       .lony-games-card-footer {display:flex;align-items:center;gap:10px;padding:0 15px 16px}
       .lony-games-leave {display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:43px;padding:10px 12px;border-radius:12px;border:1px solid #e6a9ab;background:#fff1f1;color:#a0272e;font-weight:750;font-size:13px;cursor:pointer;white-space:nowrap}
       .lony-games-leave:disabled {opacity:.6;cursor:wait}
-      .lony-games-footer-hint {margin-left:auto;color:#5e766b;font-size:11px;text-align:right}
+      .lony-games-footer-hint {margin-left:auto;color:#5e766b;font-size:11px;text-align:right;max-width:150px;line-height:1.3}
       .lony-games-back {display:inline-flex;align-items:center;gap:11px;margin-top:28px;padding:14px 21px;border-radius:999px;background:#edf6ef;color:#073a2b;font-size:15px;font-weight:750;text-decoration:none}
       .lony-games-back span {font-size:23px;font-weight:400}
       .lony-games-notice {margin-top:18px;padding:18px;border-radius:17px;background:#eff7f0;color:#103e2c;font-size:14px}
